@@ -232,7 +232,7 @@ export default class MattermostContainer {
                     // Only print plugin logs to console in non-CI environments
                     // In CI, this causes interleaving with Playwright test output
                     // Logs are always available in the server-logs.log artifact
-                    if (!process.env.CI && data.includes('"plugin_id":"mattermost-ai"')) {
+                    if (!process.env.CI && data.includes('"plugin_id":"p2lab-agents"')) {
                         // Remove API keys and sensitive tokens from logs
                         let sanitized = data
                             .replace(/"apiKey":"[^"]+"/g, '"apiKey":"[REDACTED]"')
