@@ -23,6 +23,7 @@ func TestChannelAnalysisLicenseMiddleware(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.Discard
 
+	// License checks are bypassed — all endpoints should proceed regardless of license status.
 	tests := []struct {
 		name     string
 		endpoint string
@@ -30,25 +31,25 @@ func TestChannelAnalysisLicenseMiddleware(t *testing.T) {
 		licensed bool
 	}{
 		{
-			name:     "analyze endpoint is blocked when unlicensed",
+			name:     "analyze endpoint proceeds when unlicensed",
 			endpoint: "/channel/channelid/analyze?botUsername=permtest",
 			body:     `{`,
 			licensed: false,
 		},
 		{
-			name:     "analyze endpoint proceeds past license check when licensed",
+			name:     "analyze endpoint proceeds when licensed",
 			endpoint: "/channel/channelid/analyze?botUsername=permtest",
 			body:     `{`,
 			licensed: true,
 		},
 		{
-			name:     "interval endpoint is blocked when unlicensed",
+			name:     "interval endpoint proceeds when unlicensed",
 			endpoint: "/channel/channelid/interval?botUsername=permtest",
 			body:     `{`,
 			licensed: false,
 		},
 		{
-			name:     "interval endpoint proceeds past license check when licensed",
+			name:     "interval endpoint proceeds when licensed",
 			endpoint: "/channel/channelid/interval?botUsername=permtest",
 			body:     `{`,
 			licensed: true,
@@ -87,12 +88,8 @@ func TestChannelAnalysisLicenseMiddleware(t *testing.T) {
 			e.api.ServeHTTP(&plugin.Context{}, recorder, request)
 			resp := recorder.Result()
 
-			if test.licensed {
-				require.NotEqual(t, http.StatusForbidden, resp.StatusCode)
-				return
-			}
-
-			require.Equal(t, http.StatusForbidden, resp.StatusCode)
+			// Should never get 403 Forbidden since license checks are bypassed
+			require.NotEqual(t, http.StatusForbidden, resp.StatusCode)
 		})
 	}
 }

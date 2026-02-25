@@ -91,9 +91,9 @@ export const isProfessionalLicensedOrDevelopment = (state: GlobalState): boolean
 };
 
 export function useIsMultiLLMLicensed() {
-    return useSelector(isEnterpriseLicensedOrDevelopment);
+    return true;
 }
 
 export function useIsBasicsLicensed() {
-    return useSelector(isEnterpriseLicensedOrDevelopment);
+    return true;
 }

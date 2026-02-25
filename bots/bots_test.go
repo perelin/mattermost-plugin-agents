@@ -694,7 +694,7 @@ func TestEnsureBots(t *testing.T) {
 			numCreatedBots:     1,
 		},
 		{
-			name: "multiple bots config with unlicensed server should limit to one",
+			name: "multiple bots config with unlicensed server should still allow all bots",
 			cfgBots: []llm.BotConfig{
 				{
 					ID:          "test1",
@@ -723,7 +723,7 @@ func TestEnsureBots(t *testing.T) {
 			},
 			isMultiLLMLicensed: false,
 			expectError:        false,
-			numCreatedBots:     1,
+			numCreatedBots:     2,
 		},
 		{
 			name: "multiple bots config with licensed server should not limit",
