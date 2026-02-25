@@ -70,7 +70,7 @@ export async function RunRealAPIContainer(config: ContainerConfig): Promise<Matt
   };
 
   const mattermost = await new MattermostContainer()
-    .withPlugin(filename, "mattermost-ai", pluginConfig)
+    .withPlugin(filename, "p2lab-agents", pluginConfig)
     .start();
 
   // Create test users

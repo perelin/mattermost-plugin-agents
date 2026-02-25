@@ -1,10 +1,10 @@
 {
-  "id": "mattermost-ai",
-  "name": "Agents",
+  "id": "p2lab-agents",
+  "name": "P2Lab Agents",
   "description": "",
-  "homepage_url": "https://github.com/mattermost/mattermost-plugin-agents",
-  "support_url": "https://github.com/mattermost/mattermost-plugin-agents/issues",
-  "release_notes_url": "https://github.com/mattermost/mattermost-plugin-agents",
+  "homepage_url": "",
+  "support_url": "",
+  "release_notes_url": "",
   "icon_path": "assets/bot_icon.png",
   "min_server_version": "11.9.0",
   "server": {

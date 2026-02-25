@@ -456,9 +456,9 @@ Restoring only plugin configuration isn't sufficient to restore agents managed f
 
 ### Configuration format
 
-The plugin uses a service-based architecture:
+The plugin uses a service-based architecture stored in the Mattermost database at `PluginSettings.Plugins["p2lab-agents"]`:
 
-- `PluginSettings.Plugins["mattermost-ai"]["config"]` stores plugin-wide settings and AI service configurations, including `defaultBotName`
+- `PluginSettings.Plugins["p2lab-agents"]["config"]` stores plugin-wide settings and AI service configurations, including `defaultBotName`
 - Agents are stored separately in the `Agents_UserAgents` table
 
 This separation allows multiple agents to share the same LLM service configuration while keeping agent lifecycle and access data out of `config.bots`.
