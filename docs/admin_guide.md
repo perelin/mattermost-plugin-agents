@@ -288,7 +288,7 @@ The plugin configuration is stored in the Mattermost database. To backup:
 
 ### Configuration format
 
-The plugin uses a service-based architecture stored in the Mattermost database at `PluginSettings.Plugins["mattermost-ai"]`:
+The plugin uses a service-based architecture stored in the Mattermost database at `PluginSettings.Plugins["p2lab-agents"]`:
 
 - **Services** define LLM provider configurations (API keys, models, endpoints)
 - **Bots** reference services by ID and define agent personalities and access controls

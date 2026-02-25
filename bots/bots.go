@@ -171,7 +171,7 @@ func (b *MMBots) EnsureBots() error {
 		return nil
 	}
 
-	previousMMBots, err := b.pluginAPI.Bot.List(0, 1000, pluginapi.BotOwner("mattermost-ai"), pluginapi.BotIncludeDeleted())
+	previousMMBots, err := b.pluginAPI.Bot.List(0, 1000, pluginapi.BotOwner("p2lab-agents"), pluginapi.BotIncludeDeleted())
 	if err != nil {
 		return fmt.Errorf("failed to list bots: %w", err)
 	}
