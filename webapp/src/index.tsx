@@ -186,10 +186,7 @@ export default class Plugin {
         // Register slash commands
         if (rhs) {
             registry.registerSlashCommandWillBePostedHook((message: string, args: any) => {
-                if ((message.startsWith('/ask-channel') || message.startsWith('/summarize-channel')) &&
-                    !isEnterpriseLicensedOrDevelopment(store.getState())) {
-                    return {message, args};
-                }
+                // License check bypassed — all features enabled
 
                 if (message.startsWith('/ask-channel')) {
                     const query = message.replace('/ask-channel', '').trim();
