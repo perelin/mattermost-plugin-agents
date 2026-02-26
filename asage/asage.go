@@ -105,3 +105,11 @@ func (s *Provider) CountTokens(text string) int {
 func (s *Provider) InputTokenLimit() int {
 	return 200000
 }
+
+func (s *Provider) FileConstraints() llm.FileConstraints {
+	return llm.FileConstraints{
+		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
+		// Conservative 5MB base64 limit → raw limit = 5MB * 3/4 ≈ 3.75MB.
+		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
+	}
+}

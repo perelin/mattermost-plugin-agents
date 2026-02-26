@@ -620,5 +620,6 @@ func (m *mockLanguageModel) ChatCompletion(conversation llm.CompletionRequest, o
 func (m *mockLanguageModel) ChatCompletionNoStream(conversation llm.CompletionRequest, opts ...llm.LanguageModelOption) (string, error) {
 	return "Summarized content", nil
 }
-func (m *mockLanguageModel) CountTokens(text string) int { return 0 }
-func (m *mockLanguageModel) InputTokenLimit() int        { return 1000 }
+func (m *mockLanguageModel) CountTokens(text string) int          { return 0 }
+func (m *mockLanguageModel) InputTokenLimit() int                 { return 1000 }
+func (m *mockLanguageModel) FileConstraints() llm.FileConstraints { return llm.FileConstraints{} }

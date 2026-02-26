@@ -16,28 +16,6 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 )
 
-func TestIsValidImageType(t *testing.T) {
-	tests := []struct {
-		name     string
-		mimeType string
-		expected bool
-	}{
-		{"JPEG", "image/jpeg", true},
-		{"PNG", "image/png", true},
-		{"GIF", "image/gif", true},
-		{"WebP", "image/webp", true},
-		{"Invalid", "image/bmp", false},
-		{"Invalid", "text/plain", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isValidImageType(tt.mimeType)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestConversationToMessages(t *testing.T) {
 	t.Run("system and user messages", func(t *testing.T) {
 		posts := []llm.Post{
@@ -130,15 +108,15 @@ func TestConversationToMessages(t *testing.T) {
 		assert.Equal(t, types.ImageFormatPng, imageBlock.Value.Format)
 	})
 
-	t.Run("user message with unsupported image type", func(t *testing.T) {
+	t.Run("image type passed through (pre-validated upstream)", func(t *testing.T) {
 		posts := []llm.Post{
 			{
 				Role:    llm.PostRoleUser,
 				Message: "Check this file",
 				Files: []llm.File{
 					{
-						MimeType: "image/bmp",
-						Reader:   strings.NewReader("fake bmp data"),
+						MimeType: "image/png",
+						Reader:   strings.NewReader("fake png data"),
 					},
 				},
 			},
@@ -148,12 +126,12 @@ func TestConversationToMessages(t *testing.T) {
 
 		require.Len(t, system, 0)
 		require.Len(t, messages, 1)
-		require.Len(t, messages[0].Content, 2) // text + unsupported message
+		require.Len(t, messages[0].Content, 2) // text + image
 
-		// Second block should be text indicating unsupported type
-		textBlock, ok := messages[0].Content[1].(*types.ContentBlockMemberText)
+		// Second block should be an image block
+		imageBlock, ok := messages[0].Content[1].(*types.ContentBlockMemberImage)
 		require.True(t, ok)
-		assert.Contains(t, textBlock.Value, "Unsupported image type")
+		assert.Equal(t, types.ImageFormatPng, imageBlock.Value.Format)
 	})
 
 	t.Run("tool use in assistant message", func(t *testing.T) {

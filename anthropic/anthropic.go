@@ -61,15 +61,6 @@ func New(llmService llm.ServiceConfig, botConfig llm.BotConfig, httpClient *http
 	}
 }
 
-func isValidImageType(mimeType string) bool {
-	switch mimeType {
-	case "image/jpeg", "image/png", "image/gif", "image/webp":
-		return true
-	default:
-		return false
-	}
-}
-
 // conversationToMessages creates a system prompt and a slice of input messages from conversation posts.
 func conversationToMessages(posts []llm.Post) (string, []anthropicSDK.MessageParam) {
 	var systemMessage string
@@ -142,11 +133,6 @@ func postRoleToAnthropicRole(role llm.PostRole) anthropicSDK.MessageParamRole {
 func convertFilesToBlocks(files []llm.File) []anthropicSDK.ContentBlockParamUnion {
 	var blocks []anthropicSDK.ContentBlockParamUnion
 	for _, file := range files {
-		if !isValidImageType(file.MimeType) {
-			blocks = append(blocks, anthropicSDK.NewTextBlock(fmt.Sprintf("[Unsupported image type: %s]", file.MimeType)))
-			continue
-		}
-
 		data, err := io.ReadAll(file.Reader)
 		if err != nil {
 			blocks = append(blocks, anthropicSDK.NewTextBlock("[Error reading image data]"))
@@ -554,6 +540,15 @@ func (a *Anthropic) InputTokenLimit() int {
 		return a.inputTokenLimit
 	}
 	return 100000
+}
+
+func (a *Anthropic) FileConstraints() llm.FileConstraints {
+	return llm.FileConstraints{
+		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
+		// Anthropic's 5MB limit is on the base64-encoded data, not raw bytes.
+		// Base64 inflates size by 4/3, so raw limit = 5MB * 3/4 ≈ 3.75MB.
+		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
+	}
 }
 
 func (a *Anthropic) isNativeToolEnabled(toolName string) bool {

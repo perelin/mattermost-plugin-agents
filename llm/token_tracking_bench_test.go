@@ -35,6 +35,10 @@ func (f *benchFakeLLM) InputTokenLimit() int {
 	return 100000
 }
 
+func (f *benchFakeLLM) FileConstraints() FileConstraints {
+	return FileConstraints{}
+}
+
 // BenchmarkTokenTracking benchmarks the TokenUsageLoggingWrapper performance.
 func BenchmarkTokenTracking(b *testing.B) {
 	logger, err := CreateTokenLogger()

@@ -283,17 +283,6 @@ func postsToChatCompletionMessages(posts []llm.Post) []openai.ChatCompletionMess
 				}
 
 				for _, file := range post.Files {
-					if file.MimeType != "image/png" &&
-						file.MimeType != "image/jpeg" &&
-						file.MimeType != "image/gif" &&
-						file.MimeType != "image/webp" {
-						parts = append(parts, openai.TextContentPart("User submitted image was not a supported format. Tell the user this."))
-						continue
-					}
-					if file.Size > OpenAIMaxImageSize {
-						parts = append(parts, openai.TextContentPart("User submitted an image larger than 20MB. Tell the user this."))
-						continue
-					}
 					fileBytes, err := io.ReadAll(file.Reader)
 					if err != nil {
 						continue
@@ -1292,6 +1281,15 @@ func (s *OpenAI) InputTokenLimit() int {
 	}
 
 	return 128000 // Default fallback
+}
+
+func (s *OpenAI) FileConstraints() llm.FileConstraints {
+	return llm.FileConstraints{
+		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
+		// OpenAI's 20MB limit is on base64-encoded data.
+		// Base64 inflates size by 4/3, so raw limit = 20MB * 3/4 = 15MB.
+		MaxImageSize: OpenAIMaxImageSize * 3 / 4,
+	}
 }
 
 func (s *OpenAI) CreateEmbedding(ctx context.Context, text string) ([]float32, error) {

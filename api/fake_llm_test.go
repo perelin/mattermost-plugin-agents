@@ -86,6 +86,11 @@ func (f *FakeLLM) InputTokenLimit() int {
 	return 100000 // Default reasonable limit
 }
 
+// FileConstraints returns default file constraints for testing
+func (f *FakeLLM) FileConstraints() llm.FileConstraints {
+	return llm.FileConstraints{}
+}
+
 // NewFakeLLM creates a FakeLLM with a simple text response
 func NewFakeLLM(response string) *FakeLLM {
 	return &FakeLLM{

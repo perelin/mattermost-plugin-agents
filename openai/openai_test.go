@@ -81,14 +81,14 @@ func TestPostsToChatCompletionMessages(t *testing.T) {
 			},
 		},
 		{
-			name: "unsupported image type",
+			name: "image passed through (pre-validated upstream)",
 			posts: []llm.Post{
 				{
 					Role: llm.PostRoleUser,
 					Files: []llm.File{
 						{
-							MimeType: "image/tiff",
-							Reader:   bytes.NewReader([]byte("fake-tiff-data")),
+							MimeType: "image/png",
+							Reader:   bytes.NewReader([]byte("fake-png-data")),
 							Size:     14,
 						},
 					},
@@ -97,27 +97,6 @@ func TestPostsToChatCompletionMessages(t *testing.T) {
 			check: func(t *testing.T, messages []openai.ChatCompletionMessageParamUnion) {
 				require.Len(t, messages, 1)
 				assert.NotNil(t, messages[0].OfUser)
-			},
-		},
-		{
-			name: "oversized image",
-			posts: []llm.Post{
-				{
-					Role:    llm.PostRoleUser,
-					Message: "Check this huge image:",
-					Files: []llm.File{
-						{
-							MimeType: "image/jpeg",
-							Reader:   bytes.NewReader([]byte("fake-image-data")),
-							Size:     OpenAIMaxImageSize + 1, // Over 20MB
-						},
-					},
-				},
-			},
-			check: func(t *testing.T, messages []openai.ChatCompletionMessageParamUnion) {
-				require.Len(t, messages, 1)
-				assert.NotNil(t, messages[0].OfUser)
-				// Should have a message about the image being too large
 			},
 		},
 		{

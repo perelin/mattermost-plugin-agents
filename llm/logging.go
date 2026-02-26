@@ -45,6 +45,10 @@ func (w *LanguageModelLogWrapper) InputTokenLimit() int {
 	return w.wrapped.InputTokenLimit()
 }
 
+func (w *LanguageModelLogWrapper) FileConstraints() FileConstraints {
+	return w.wrapped.FileConstraints()
+}
+
 type LanguageModelTestLogWrapper struct {
 	t       *testing.T
 	wrapped LanguageModel
@@ -78,4 +82,8 @@ func (w *LanguageModelTestLogWrapper) CountTokens(text string) int {
 
 func (w *LanguageModelTestLogWrapper) InputTokenLimit() int {
 	return w.wrapped.InputTokenLimit()
+}
+
+func (w *LanguageModelTestLogWrapper) FileConstraints() FileConstraints {
+	return w.wrapped.FileConstraints()
 }

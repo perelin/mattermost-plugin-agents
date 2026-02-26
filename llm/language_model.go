@@ -21,6 +21,8 @@
 package llm
 
 import (
+	"slices"
+
 	"github.com/google/jsonschema-go/jsonschema"
 )
 
@@ -30,6 +32,19 @@ type LanguageModel interface {
 
 	CountTokens(text string) int
 	InputTokenLimit() int
+	FileConstraints() FileConstraints
+}
+
+// FileConstraints describes the file types and sizes a provider supports.
+type FileConstraints struct {
+	SupportedImageTypes []string // MIME types, e.g. ["image/jpeg", "image/png"]
+	MaxImageSize        int64    // bytes, 0 = no plugin-side limit
+	MaxTextFileSize     int64    // bytes, 0 = use defaultMaxFileSize (5MB)
+}
+
+// HasSupportedImageType checks if the given MIME type is in the supported list.
+func (fc FileConstraints) HasSupportedImageType(mimeType string) bool {
+	return slices.Contains(fc.SupportedImageTypes, mimeType)
 }
 
 type LanguageModelConfig struct {

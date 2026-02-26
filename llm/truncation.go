@@ -40,3 +40,7 @@ func (w *TruncationWrapper) CountTokens(text string) int {
 func (w *TruncationWrapper) InputTokenLimit() int {
 	return w.wrapped.InputTokenLimit()
 }
+
+func (w *TruncationWrapper) FileConstraints() FileConstraints {
+	return w.wrapped.FileConstraints()
+}

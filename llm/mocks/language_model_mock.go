@@ -209,6 +209,50 @@ func (_c *MockLanguageModel_CountTokens_Call) RunAndReturn(run func(text string)
 	return _c
 }
 
+// FileConstraints provides a mock function for the type MockLanguageModel
+func (_mock *MockLanguageModel) FileConstraints() llm.FileConstraints {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for FileConstraints")
+	}
+
+	var r0 llm.FileConstraints
+	if returnFunc, ok := ret.Get(0).(func() llm.FileConstraints); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(llm.FileConstraints)
+	}
+	return r0
+}
+
+// MockLanguageModel_FileConstraints_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FileConstraints'
+type MockLanguageModel_FileConstraints_Call struct {
+	*mock.Call
+}
+
+// FileConstraints is a helper method to define mock.On call
+func (_e *MockLanguageModel_Expecter) FileConstraints() *MockLanguageModel_FileConstraints_Call {
+	return &MockLanguageModel_FileConstraints_Call{Call: _e.mock.On("FileConstraints")}
+}
+
+func (_c *MockLanguageModel_FileConstraints_Call) Run(run func()) *MockLanguageModel_FileConstraints_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockLanguageModel_FileConstraints_Call) Return(fileConstraints llm.FileConstraints) *MockLanguageModel_FileConstraints_Call {
+	_c.Call.Return(fileConstraints)
+	return _c
+}
+
+func (_c *MockLanguageModel_FileConstraints_Call) RunAndReturn(run func() llm.FileConstraints) *MockLanguageModel_FileConstraints_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InputTokenLimit provides a mock function for the type MockLanguageModel
 func (_mock *MockLanguageModel) InputTokenLimit() int {
 	ret := _mock.Called()

@@ -338,8 +338,65 @@ func (c *Conversations) BotCreateNonResponsePost(botid string, requesterUserID s
 	return nil
 }
 
-func isImageMimeType(mimeType string) bool {
-	return strings.HasPrefix(mimeType, "image/")
+func humanReadableSize(bytes int64) string {
+	const mb = 1024 * 1024
+	if bytes >= mb {
+		return fmt.Sprintf("%.0fMB", float64(bytes)/float64(mb))
+	}
+	const kb = 1024
+	return fmt.Sprintf("%.0fKB", float64(bytes)/float64(kb))
+}
+
+type skippedFile struct {
+	name   string
+	reason string
+}
+
+func formatSkippedFilesNote(skipped []skippedFile, supportedTypes []string) string {
+	if len(skipped) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n[Note: The following attached files could not be processed:\n")
+	for _, f := range skipped {
+		fmt.Fprintf(&b, "- %s (%s)\n", f.name, f.reason)
+	}
+
+	// Build human-readable type list from MIME types
+	typeNames := make([]string, 0, len(supportedTypes))
+	for _, t := range supportedTypes {
+		// "image/jpeg" -> "JPEG"
+		parts := strings.SplitN(t, "/", 2)
+		if len(parts) == 2 {
+			typeNames = append(typeNames, strings.ToUpper(parts[1]))
+		}
+	}
+	fmt.Fprintf(&b, "Only text files and images (%s) can be processed.]", strings.Join(typeNames, ", "))
+	return b.String()
+}
+
+func fileSkipReason(fileInfo *model.FileInfo, enableVision bool, constraints llm.FileConstraints) string {
+	isImage := strings.HasPrefix(fileInfo.MimeType, "image/")
+
+	if isImage && !enableVision {
+		return "image processing is not enabled"
+	}
+	if isImage && !constraints.HasSupportedImageType(fileInfo.MimeType) {
+		supported := make([]string, 0, len(constraints.SupportedImageTypes))
+		for _, t := range constraints.SupportedImageTypes {
+			parts := strings.SplitN(t, "/", 2)
+			if len(parts) == 2 {
+				supported = append(supported, strings.ToUpper(parts[1]))
+			}
+		}
+		return fmt.Sprintf("unsupported image format, supported: %s", strings.Join(supported, ", "))
+	}
+	if isImage && constraints.MaxImageSize > 0 && fileInfo.Size > constraints.MaxImageSize {
+		return fmt.Sprintf("image too large: %s, maximum: %s",
+			humanReadableSize(fileInfo.Size), humanReadableSize(constraints.MaxImageSize))
+	}
+
+	return "file type not supported"
 }
 
 func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
@@ -351,6 +408,9 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 	if bot.GetConfig().MaxFileSize > 0 {
 		maxFileSize = bot.GetConfig().MaxFileSize
 	}
+
+	constraints := bot.LLM().FileConstraints()
+	var skipped []skippedFile
 
 	for _, fileID := range post.FileIds {
 		fileInfo, err := c.mmClient.GetFileInfo(fileID)
@@ -378,14 +438,10 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 			if int64(len(contentBytes)) == maxFileSize {
 				content += "\n... (content truncated due to size limit)"
 			}
-		}
-
-		if content != "" {
-			fileContent := fmt.Sprintf("File Name: %s\nContent: %s", fileInfo.Name, content)
-			extractedFileContents = append(extractedFileContents, fileContent)
-		}
-
-		if bot.GetConfig().EnableVision && isImageMimeType(fileInfo.MimeType) {
+		} else if bot.GetConfig().EnableVision && strings.HasPrefix(fileInfo.MimeType, "image/") &&
+			constraints.HasSupportedImageType(fileInfo.MimeType) &&
+			(constraints.MaxImageSize == 0 || fileInfo.Size <= constraints.MaxImageSize) {
+			// Valid image — fetch and add to upstream files
 			file, err := c.mmClient.GetFile(fileID)
 			if err != nil {
 				c.mmClient.LogError("Error getting file", "error", err)
@@ -396,12 +452,28 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 				MimeType: fileInfo.MimeType,
 				Size:     fileInfo.Size,
 			})
+		} else if strings.TrimSpace(fileInfo.Content) == "" && !strings.HasPrefix(fileInfo.MimeType, "text/") {
+			// File is not text, not server-extracted, and not a valid image — skip with reason
+			skipped = append(skipped, skippedFile{
+				name:   fileInfo.Name,
+				reason: fileSkipReason(fileInfo, bot.GetConfig().EnableVision, constraints),
+			})
+		}
+
+		if content != "" {
+			fileContent := fmt.Sprintf("File Name: %s\nContent: %s", fileInfo.Name, content)
+			extractedFileContents = append(extractedFileContents, fileContent)
 		}
 	}
 
 	// Add structured file contents to the message
 	if len(extractedFileContents) > 0 {
 		message += "\nAttached File Contents:\n" + strings.Join(extractedFileContents, "\n\n")
+	}
+
+	// Add note about skipped files
+	if note := formatSkippedFilesNote(skipped, constraints.SupportedImageTypes); note != "" {
+		message += note
 	}
 
 	role := llm.PostRoleUser

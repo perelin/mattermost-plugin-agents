@@ -161,3 +161,8 @@ func (w *TokenUsageLoggingWrapper) CountTokens(text string) int {
 func (w *TokenUsageLoggingWrapper) InputTokenLimit() int {
 	return w.wrapped.InputTokenLimit()
 }
+
+// FileConstraints delegates to the wrapped model
+func (w *TokenUsageLoggingWrapper) FileConstraints() FileConstraints {
+	return w.wrapped.FileConstraints()
+}

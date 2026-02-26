@@ -388,7 +388,7 @@ func TestConversationToMessages(t *testing.T) {
 			},
 		},
 		{
-			name: "unsupported image type",
+			name: "image type passed through (pre-validated upstream)",
 			conversation: []llm.Post{
 				{Role: llm.PostRoleUser, Files: []llm.File{
 					{
@@ -402,7 +402,7 @@ func TestConversationToMessages(t *testing.T) {
 				{
 					Role: anthropicSDK.MessageParamRoleUser,
 					Content: []anthropicSDK.ContentBlockParamUnion{
-						anthropicSDK.NewTextBlock("[Unsupported image type: image/tiff]"),
+						anthropicSDK.NewImageBlockBase64("image/tiff", "ZmFrZS10aWZmLWRhdGE="),
 					},
 				},
 			},
@@ -512,7 +512,7 @@ func TestConversationToMessages(t *testing.T) {
 					Content: []anthropicSDK.ContentBlockParamUnion{
 						anthropicSDK.NewTextBlock("Here are more:"),
 						anthropicSDK.NewImageBlockBase64("image/webp", "aW1hZ2UtMw=="),
-						anthropicSDK.NewTextBlock("[Unsupported image type: image/tiff]"),
+						anthropicSDK.NewImageBlockBase64("image/tiff", "aW1hZ2UtNA=="),
 						anthropicSDK.NewImageBlockBase64("image/gif", "aW1hZ2UtNQ=="),
 					},
 				},

@@ -37,6 +37,11 @@ func (m *MockLanguageModel) InputTokenLimit() int {
 	return args.Int(0)
 }
 
+func (m *MockLanguageModel) FileConstraints() FileConstraints {
+	args := m.Called()
+	return args.Get(0).(FileConstraints)
+}
+
 func TestTokenTrackingWrapper_ChatCompletion(t *testing.T) {
 	t.Run("filters usage events from stream", func(t *testing.T) {
 		mockLLM := &MockLanguageModel{}

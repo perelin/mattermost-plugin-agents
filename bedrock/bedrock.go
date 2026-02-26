@@ -115,17 +115,6 @@ func New(llmService llm.ServiceConfig, httpClient *http.Client) (*Bedrock, error
 	}, nil
 }
 
-// isValidImageType checks if the MIME type is supported by the Bedrock API
-func isValidImageType(mimeType string) bool {
-	validTypes := map[string]bool{
-		"image/jpeg": true,
-		"image/png":  true,
-		"image/gif":  true,
-		"image/webp": true,
-	}
-	return validTypes[mimeType]
-}
-
 // conversationToMessages creates a system prompt and a slice of messages from conversation posts.
 func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []types.Message) {
 	var systemBlocks []types.SystemContentBlock
@@ -173,13 +162,6 @@ func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []typ
 		}
 
 		for _, file := range post.Files {
-			if !isValidImageType(file.MimeType) {
-				currentBlocks = append(currentBlocks, &types.ContentBlockMemberText{
-					Value: fmt.Sprintf("[Unsupported image type: %s]", file.MimeType),
-				})
-				continue
-			}
-
 			data, err := io.ReadAll(file.Reader)
 			if err != nil {
 				currentBlocks = append(currentBlocks, &types.ContentBlockMemberText{
@@ -188,7 +170,6 @@ func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []typ
 				continue
 			}
 
-			// Determine format string from MIME type
 			var format types.ImageFormat
 			switch file.MimeType {
 			case "image/jpeg":
@@ -611,4 +592,13 @@ func (b *Bedrock) InputTokenLimit() int {
 	// in the service config for their specific model.
 	// See: https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html
 	return 200000
+}
+
+func (b *Bedrock) FileConstraints() llm.FileConstraints {
+	return llm.FileConstraints{
+		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
+		// Bedrock's limit is on base64-encoded data.
+		// Base64 inflates size by 4/3, so raw limit = 5MB * 3/4 ≈ 3.75MB.
+		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
+	}
 }
