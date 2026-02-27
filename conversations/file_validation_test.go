@@ -138,7 +138,7 @@ func TestPostToAIPost_FileValidation(t *testing.T) {
 				mmClient.On("GetFile", fi.Id).Return(io.NopCloser(bytes.NewReader(fileContent)), nil).Maybe()
 			}
 
-			botService := bots.New(nil, nil, nil, nil, nil, nil, nil)
+			botService := bots.New("p2lab-agents", nil, nil, nil, nil, nil, nil, nil)
 			conv := conversations.New(nil, mmClient, nil, nil, botService, nil, nil, i18n.Init(), nil, nil)
 
 			result := conv.PostToAIPost(bot, post)
