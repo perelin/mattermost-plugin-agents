@@ -128,8 +128,8 @@ export default class Plugin {
         });
 
         // Handle all post-related websocket events with one handler
-        registry.registerWebSocketEventHandler('custom_mattermost-ai_postupdate', this.postEventListener.handlePostUpdateWebsockets);
-        registry.registerWebSocketEventHandler('custom_mattermost-ai_tool_call_status_updated', this.postEventListener.handlePostUpdateWebsockets);
+        registry.registerWebSocketEventHandler(`custom_${manifest.id}_postupdate`, this.postEventListener.handlePostUpdateWebsockets);
+        registry.registerWebSocketEventHandler(`custom_${manifest.id}_tool_call_status_updated`, this.postEventListener.handlePostUpdateWebsockets);
 
         const LLMBotPostWithWebsockets = (props: any) => {
             return (
@@ -148,8 +148,8 @@ export default class Plugin {
             } as any);
         });
 
-        registry.registerPostTypeComponent('custom_llmbot', LLMBotPostWithWebsockets);
-        registry.registerPostTypeComponent('custom_llm_postback', PostbackPost);
+        registry.registerPostTypeComponent('custom_p2lab_agents_bot', LLMBotPostWithWebsockets);
+        registry.registerPostTypeComponent('custom_p2lab_agents_postback', PostbackPost);
         if (registry.registerPostActionComponent) {
             registry.registerPostActionComponent(PostMenu);
         } else {
@@ -242,7 +242,7 @@ export default class Plugin {
         }
 
         // Block all threaded replies from our AI bots
-        if (post.root_id && post.type === 'custom_llmbot') {
+        if (post.root_id && post.type === 'custom_p2lab_agents_bot') {
             return {args: {...args, notify: false}};
         }
 
