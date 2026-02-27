@@ -4,22 +4,20 @@
 package meetings
 
 import (
+	"fmt"
 	"os/exec"
 )
 
-const (
-	ffmpegPluginPath = "./plugins/mattermost-ai/dist/ffmpeg"
-)
-
 // resolveFFMPEGPath checks for ffmpeg installation and returns the appropriate path
-func resolveFFMPEGPath() string {
+func resolveFFMPEGPath(pluginID string) string {
 	_, standardPathErr := exec.LookPath("ffmpeg")
 	if standardPathErr != nil {
-		_, pluginPathErr := exec.LookPath(ffmpegPluginPath)
+		pluginPath := fmt.Sprintf("./plugins/%s/dist/ffmpeg", pluginID)
+		_, pluginPathErr := exec.LookPath(pluginPath)
 		if pluginPathErr != nil {
 			return ""
 		}
-		return ffmpegPluginPath
+		return pluginPath
 	}
 
 	return "ffmpeg"

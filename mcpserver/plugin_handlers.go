@@ -25,7 +25,7 @@ type PluginMCPHandlers struct {
 
 // NewPluginMCPHandlers creates MCP handlers for use within a Mattermost plugin
 // The handlers expect requests to have an Authorization Bearer token injected by the plugin middleware
-func NewPluginMCPHandlers(siteURL string, logger loggerlib.Logger) (*PluginMCPHandlers, error) {
+func NewPluginMCPHandlers(pluginID string, siteURL string, logger loggerlib.Logger) (*PluginMCPHandlers, error) {
 	if siteURL == "" {
 		return nil, fmt.Errorf("site URL cannot be empty")
 	}
@@ -79,11 +79,11 @@ func NewPluginMCPHandlers(siteURL string, logger loggerlib.Logger) (*PluginMCPHa
 	}, nil)
 
 	// Create OAuth metadata handler using shared implementation
-	resourceURL := fmt.Sprintf("%s/plugins/mattermost-ai/mcp-server", siteURL)
+	resourceURL := fmt.Sprintf("%s/plugins/%s/mcp-server", siteURL, pluginID)
 	metadataHandler := CreateOAuthMetadataHandler(resourceURL, siteURL, "Mattermost MCP Server")
 
 	// The metadata URL for WWW-Authenticate headers
-	metadataURL := fmt.Sprintf("%s/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource", siteURL)
+	metadataURL := fmt.Sprintf("%s/plugins/%s/mcp-server/.well-known/oauth-protected-resource", siteURL, pluginID)
 
 	return &PluginMCPHandlers{
 		MCPHandler:           streamableHandler,

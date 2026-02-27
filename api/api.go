@@ -57,6 +57,7 @@ type MCPClientManager interface {
 
 // API represents the HTTP API functionality for the plugin
 type API struct {
+	pluginID              string
 	bots                  *bots.MMBots
 	conversationsService  *conversations.Conversations
 	meetingsService       *meetings.Service
@@ -80,6 +81,7 @@ type API struct {
 
 // New creates a new API instance
 func New(
+	pluginID string,
 	bots *bots.MMBots,
 	conversationsService *conversations.Conversations,
 	meetingsService *meetings.Service,
@@ -100,6 +102,7 @@ func New(
 	llmUpstreamHTTPClient *http.Client,
 ) *API {
 	return &API{
+		pluginID:              pluginID,
 		bots:                  bots,
 		conversationsService:  conversationsService,
 		meetingsService:       meetingsService,

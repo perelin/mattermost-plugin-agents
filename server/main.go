@@ -243,6 +243,7 @@ func (p *Plugin) OnActivate() error {
 	)
 
 	meetingsService := meetings.NewService(
+		manifestID,
 		pluginAPI,
 		streamingService,
 		prompts,
@@ -262,7 +263,7 @@ func (p *Plugin) OnActivate() error {
 	var mcpHandlers *mcpserver.PluginMCPHandlers
 	// Create logger adapter to route MCP handler logs through plugin logging
 	mcpHandlerLogger := NewPluginAPILoggerAdapter(pluginAPI.Log)
-	handlers, err := mcpserver.NewPluginMCPHandlers(*siteURL, mcpHandlerLogger)
+	handlers, err := mcpserver.NewPluginMCPHandlers(manifestID, *siteURL, mcpHandlerLogger)
 	if err != nil {
 		pluginAPI.Log.Error("Failed to create MCP handlers", "error", err)
 	} else {
@@ -271,6 +272,7 @@ func (p *Plugin) OnActivate() error {
 	}
 
 	apiService := api.New(
+		manifestID,
 		bots,
 		conversationsService,
 		meetingsService,

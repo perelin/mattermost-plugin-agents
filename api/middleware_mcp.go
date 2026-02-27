@@ -37,7 +37,7 @@ func (a *API) sendMCPUnauthorized(c *gin.Context) {
 
 	siteURL := *config.ServiceSettings.SiteURL
 	// OAuth metadata is now under the plugin mcp-server path
-	resourceMetadataURL := fmt.Sprintf("%s/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource", siteURL)
+	resourceMetadataURL := fmt.Sprintf("%s/plugins/%s/mcp-server/.well-known/oauth-protected-resource", siteURL, a.pluginID)
 
 	// Set WWW-Authenticate header for OAuth discovery (RFC 9728)
 	c.Header("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s"`, resourceMetadataURL))
