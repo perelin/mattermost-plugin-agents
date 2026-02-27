@@ -114,7 +114,7 @@ func (s *Service) HandlePostbackSummary(userID string, post *model.Post) (map[st
 		ChannelId: transcriptionPost.ChannelId,
 		RootId:    transcriptionPost.RootId,
 		Message:   post.Message,
-		Type:      "custom_llm_postback",
+		Type:      "custom_p2lab_agents_postback",
 	}
 	postedSummary.AddProp("userid", userID)
 	if err := s.pluginAPI.Post.CreatePost(postedSummary); err != nil {

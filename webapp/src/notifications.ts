@@ -24,7 +24,7 @@ export function shouldSuppressBotNotification(
         return false;
     }
 
-    if (post.type === 'custom_llmbot') {
+    if (post.type === 'custom_p2lab_agents_bot') {
         return true;
     }
 

@@ -10,7 +10,7 @@ import (
 
 // AgentMentionReminderPostType is the custom post type used for the ephemeral
 // "you must @mention an agent" reminder rendered by the webapp.
-const AgentMentionReminderPostType = "custom_agent_mention_reminder"
+const AgentMentionReminderPostType = "custom_p2lab_agents_mention_reminder"
 
 // Prop keys carried on the custom post for the webapp to read when rendering.
 const (

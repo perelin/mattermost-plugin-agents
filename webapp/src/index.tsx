@@ -186,12 +186,12 @@ export default class Plugin {
         });
 
         // Handle all post-related websocket events with one handler
-        registry.registerWebSocketEventHandler('custom_mattermost-ai_postupdate', this.postEventListener.handlePostUpdateWebsockets);
-        registry.registerWebSocketEventHandler('custom_mattermost-ai_tool_call_status_updated', this.postEventListener.handlePostUpdateWebsockets);
+        registry.registerWebSocketEventHandler(`custom_${manifest.id}_postupdate`, this.postEventListener.handlePostUpdateWebsockets);
+        registry.registerWebSocketEventHandler(`custom_${manifest.id}_tool_call_status_updated`, this.postEventListener.handlePostUpdateWebsockets);
 
         // Invalidate conversation cache when backend publishes conversation updates
         registry.registerWebSocketEventHandler(
-            'custom_mattermost-ai_conversation_updated',
+            `custom_${manifest.id}_conversation_updated`,
             (msg: WebSocketMessage<{conversation_id: string}>) => {
                 invalidateConversation(msg.data.conversation_id);
             },
@@ -199,7 +199,7 @@ export default class Plugin {
 
         // MCP OAuth connect/disconnect: refresh cached tool lists in open UI.
         registry.registerWebSocketEventHandler(
-            'custom_mattermost-ai_mcp_connection_updated',
+            `custom_${manifest.id}_mcp_connection_updated`,
             (msg: WebSocketMessage<MCPConnectionEvent>) => {
                 notifyMCPConnectionUpdated(msg.data);
             },
@@ -225,11 +225,11 @@ export default class Plugin {
         registry.registerWebSocketEventHandler('config_changed', invalidateRuntimeBotsCache);
 
         // Agent CRUD refreshes server-side bot cache but does not emit config_changed; mirror that invalidate so RHS dropdown refetches.
-        registry.registerWebSocketEventHandler('custom_mattermost-ai_bots_invalidate', invalidateRuntimeBotsCache);
+        registry.registerWebSocketEventHandler(`custom_${manifest.id}_bots_invalidate`, invalidateRuntimeBotsCache);
 
-        registry.registerPostTypeComponent('custom_llmbot', LLMBotPostWithWebsockets);
-        registry.registerPostTypeComponent('custom_llm_postback', PostbackPost);
-        registry.registerPostTypeComponent('custom_agent_mention_reminder', AgentMentionReminderPost);
+        registry.registerPostTypeComponent('custom_p2lab_agents_bot', LLMBotPostWithWebsockets);
+        registry.registerPostTypeComponent('custom_p2lab_agents_postback', PostbackPost);
+        registry.registerPostTypeComponent('custom_p2lab_agents_mention_reminder', AgentMentionReminderPost);
         if (registry.registerPostActionComponent) {
             registry.registerPostActionComponent(PostMenu);
         } else {

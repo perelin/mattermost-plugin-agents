@@ -692,7 +692,7 @@ func (p *Plugin) shouldBlockAgentNotification(senderID, rootID, postType string,
 		return true
 	}
 
-	if postType == "custom_llmbot" {
+	if postType == "custom_p2lab_agents_bot" {
 		return true
 	}
 

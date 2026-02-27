@@ -3,7 +3,7 @@
 
 import {useEffect} from 'react';
 
-// Payload for custom_mattermost-ai_mcp_connection_updated websocket events.
+// Payload for custom_p2lab-agents_mcp_connection_updated websocket events.
 export type MCPConnectionEvent = {
     status: 'connected' | 'disconnected';
     serverName?: string;

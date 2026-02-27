@@ -24,10 +24,10 @@ import (
 
 var validUsernameRe = regexp.MustCompile(`^[a-z][a-z0-9._-]*$`)
 
-// WebsocketEventBotsInvalidate is the event name for PublishWebSocketEvent (webapp: custom_mattermost-ai_<name>).
+// WebsocketEventBotsInvalidate is the event name for PublishWebSocketEvent (webapp: custom_p2lab-agents_<name>).
 const WebsocketEventBotsInvalidate = "bots_invalidate"
 
-// WebsocketEventMCPConnectionUpdated is the event name for user-scoped MCP OAuth connection updates (webapp: custom_mattermost-ai_<name>).
+// WebsocketEventMCPConnectionUpdated is the event name for user-scoped MCP OAuth connection updates (webapp: custom_p2lab-agents_<name>).
 const WebsocketEventMCPConnectionUpdated = "mcp_connection_updated"
 
 // MaxAgentRequestBodyBytes caps the JSON body size for agent create/update requests
