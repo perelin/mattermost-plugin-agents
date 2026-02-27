@@ -15,6 +15,11 @@ DEFAULT_GOARCH := $(shell go env GOARCH)
 # loadtest-controller-* targets run the same lint/test/drift checks against it.
 LOADTEST_CONTROLLER_DIR := loadtest/controller
 
+# Load deploy credentials if available (gitignored)
+-include .env
+export MM_SERVICESETTINGS_SITEURL
+export MM_ADMIN_TOKEN
+
 export GO111MODULE=on
 
 # We need to export GOBIN to allow it to be set
