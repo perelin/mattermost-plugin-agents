@@ -131,6 +131,19 @@ export const LLMBotPost = (props: LLMBotPostProps) => {
 
     // Keep prior rounds visible during the refetch window after invalidate.
     const lastPersistedRef = useRef<Round[]>([]);
+
+    // Clear the "Starting..." spinner when content already exists but the
+    // websocket events that would normally clear it were missed (e.g. the
+    // component mounted after streaming already started or completed). In the
+    // turn-based model the source of truth is the persisted rounds and the
+    // post message, not the legacy reasoning/tool-call post props.
+    useEffect(() => {
+        if (precontent && (props.post.message !== '' || persistedRounds.length > 0)) {
+            setPrecontent(false);
+        }
+    }, [precontent, props.post.message, persistedRounds]);
+
+
     useEffect(() => {
         if (conversation) {
             lastPersistedRef.current = persistedRounds;
