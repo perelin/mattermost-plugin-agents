@@ -10,6 +10,11 @@ DLV_DEBUG_PORT := 2346
 DEFAULT_GOOS := $(shell go env GOOS)
 DEFAULT_GOARCH := $(shell go env GOARCH)
 
+# Load deploy credentials if available (gitignored)
+-include .env
+export MM_SERVICESETTINGS_SITEURL
+export MM_ADMIN_TOKEN
+
 export GO111MODULE=on
 
 # We need to export GOBIN to allow it to be set
