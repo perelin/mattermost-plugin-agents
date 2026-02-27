@@ -255,6 +255,20 @@ export const LLMBotPost = (props: LLMBotPostProps) => {
         }
     }, [props.post.message]);
 
+    // Clear "Starting..." spinner when any content arrives via Redux props.
+    // This is the safety net for when websocket events are missed (e.g., the
+    // component mounted after streaming already started or completed).
+    useEffect(() => {
+        if (precontent && (
+            props.post.message !== '' ||
+            props.post.props?.reasoning_summary ||
+            props.post.props?.pending_tool_call ||
+            props.post.props?.annotations
+        )) {
+            setPrecontent(false);
+        }
+    }, [precontent, props.post.message, props.post.props?.reasoning_summary, props.post.props?.pending_tool_call, props.post.props?.annotations]);
+
     useEffect(() => {
         if (props.websocketRegister && props.websocketUnregister) {
             const listenerID = Math.random().toString(36).substring(7);
