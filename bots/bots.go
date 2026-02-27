@@ -40,7 +40,12 @@ type Transcriber interface {
 	Transcribe(file io.Reader) (*subtitles.Subtitles, error)
 }
 
+// oldPluginID is the previous plugin identifier used before the rename to p2lab-agents.
+// Bots created under this ID need to be discovered during migration.
+const oldPluginID = "mattermost-ai"
+
 type MMBots struct {
+	pluginID               string
 	ensureBotsClusterMutex cluster.MutexPluginAPI
 	pluginAPI              *pluginapi.Client
 	licenseChecker         *enterprise.LicenseChecker
@@ -61,13 +66,14 @@ type MMBots struct {
 	lastEnsuredServiceCfgs map[string]llm.ServiceConfig
 }
 
-func New(mutexPluginAPI cluster.MutexPluginAPI, pluginAPI *pluginapi.Client, licenseChecker *enterprise.LicenseChecker, config Config, llmUpstreamHTTPClient *http.Client, metrics llm.MetricsObserver) *MMBots {
+func New(pluginID string, mutexPluginAPI cluster.MutexPluginAPI, pluginAPI *pluginapi.Client, licenseChecker *enterprise.LicenseChecker, config Config, llmUpstreamHTTPClient *http.Client, metrics llm.MetricsObserver) *MMBots {
 	var pluginTokenLogger llm.TokenUsagePluginLogger
 	if pluginAPI != nil {
 		pluginTokenLogger = &pluginAPI.Log
 	}
 
 	return &MMBots{
+		pluginID:               pluginID,
 		ensureBotsClusterMutex: mutexPluginAPI,
 		pluginAPI:              pluginAPI,
 		licenseChecker:         licenseChecker,
@@ -217,9 +223,18 @@ func (b *MMBots) EnsureBots() error {
 		return nil
 	}
 
-	previousMMBots, err := b.pluginAPI.Bot.List(0, 1000, pluginapi.BotOwner("p2lab-agents"), pluginapi.BotIncludeDeleted())
+	previousMMBots, err := b.pluginAPI.Bot.List(0, 1000, pluginapi.BotOwner(b.pluginID), pluginapi.BotIncludeDeleted())
 	if err != nil {
 		return fmt.Errorf("failed to list bots: %w", err)
+	}
+
+	// Migrate bots from the old mattermost-ai plugin so they can be reused
+	// instead of failing with "email already exists" during creation.
+	if b.pluginID != oldPluginID {
+		if oldBots, listErr := b.pluginAPI.Bot.List(0, 1000, pluginapi.BotOwner(oldPluginID), pluginapi.BotIncludeDeleted()); listErr == nil && len(oldBots) > 0 {
+			b.pluginAPI.Log.Info("Found bots owned by old plugin, migrating", "old_plugin_id", oldPluginID, "count", len(oldBots))
+			previousMMBots = append(previousMMBots, oldBots...)
+		}
 	}
 
 	// Only allow one bot if not multi-LLM licensed

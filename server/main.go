@@ -126,7 +126,7 @@ func (p *Plugin) OnActivate() error {
 		pluginAPI.Log.Info("In-memory configuration updated after migrations")
 	}
 
-	bots := bots.New(p.API, pluginAPI, licenseChecker, &p.configuration, llmUpstreamHTTPClient, metricsService)
+	bots := bots.New(manifest.Id, p.API, pluginAPI, licenseChecker, &p.configuration, llmUpstreamHTTPClient, metricsService)
 	p.configuration.RegisterUpdateListener(func() {
 		if ensureErr := bots.EnsureBots(); ensureErr != nil {
 			pluginAPI.Log.Error("failed to ensure bots on configuration update", "error", ensureErr)
