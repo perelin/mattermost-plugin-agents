@@ -69,6 +69,7 @@ func NewPluginMCPHandlers(
 	logger loggerlib.Logger,
 	registry PluginServerRegistry,
 	sourcePluginAPI mmapi.Client,
+	pluginID string,
 ) (*PluginMCPHandlers, error) {
 	if siteURL == "" {
 		return nil, fmt.Errorf("site URL cannot be empty")
@@ -100,10 +101,10 @@ func NewPluginMCPHandlers(
 		return srv
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
 
-	resourceURL := fmt.Sprintf("%s/plugins/mattermost-ai/mcp-server", siteURL)
+	resourceURL := fmt.Sprintf("%s/plugins/%s/mcp-server", siteURL, pluginID)
 	metadataHandler := CreateOAuthMetadataHandler(resourceURL, siteURL, "Mattermost MCP Server")
 
-	metadataURL := fmt.Sprintf("%s/plugins/mattermost-ai/mcp-server/.well-known/oauth-protected-resource", siteURL)
+	metadataURL := fmt.Sprintf("%s/plugins/%s/mcp-server/.well-known/oauth-protected-resource", siteURL, pluginID)
 
 	h.MCPHandler = streamableHandler
 	h.OAuthMetadataHandler = metadataHandler

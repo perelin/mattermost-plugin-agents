@@ -131,6 +131,7 @@ type StreamStopClusterNotifier interface {
 
 // API represents the HTTP API functionality for the plugin
 type API struct {
+	pluginID              string
 	bots                  *bots.MMBots
 	conversationsService  *conversations.Conversations
 	meetingsService       *meetings.Service
@@ -176,6 +177,7 @@ func (a *API) SetExternalRebuilderForTest(rb externalServerRebuilder) {
 
 // New creates a new API instance
 func New(
+	pluginID string,
 	bots *bots.MMBots,
 	conversationsService *conversations.Conversations,
 	meetingsService *meetings.Service,
@@ -206,6 +208,7 @@ func New(
 	customPromptsStore *customprompts.Store,
 ) *API {
 	return &API{
+		pluginID:              pluginID,
 		bots:                  bots,
 		conversationsService:  conversationsService,
 		meetingsService:       meetingsService,

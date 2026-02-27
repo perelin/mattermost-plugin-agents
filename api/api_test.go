@@ -576,6 +576,7 @@ func SetupTestEnvironment(t *testing.T) *TestEnvironment {
 	)
 
 	api := New(
+		"p2lab-agents-test",
 		testBots,
 		conversationsService,
 		nil,

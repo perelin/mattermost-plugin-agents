@@ -38,6 +38,7 @@ type Service struct {
 
 // NewService creates a new meetings service
 func NewService(
+	pluginID string,
 	pluginAPI *pluginapi.Client,
 	streamingService streaming.Service,
 	prompts *llm.Prompts,
@@ -60,7 +61,7 @@ func NewService(
 		conversations:    conversations,
 	}
 
-	service.ffmpegPath = resolveFFMPEGPath()
+	service.ffmpegPath = resolveFFMPEGPath(pluginID)
 	if service.ffmpegPath == "" {
 		service.pluginAPI.Log.Error("ffmpeg not installed, transcriptions will be disabled.")
 	}
