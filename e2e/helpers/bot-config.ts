@@ -39,7 +39,7 @@ export interface PluginConfig {
 
 export class BotConfigHelper {
     private client: Client4;
-    private pluginId = 'mattermost-ai';
+    private pluginId = 'p2lab-agents';
 
     constructor(client: Client4) {
         this.client = client;

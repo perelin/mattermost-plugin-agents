@@ -11,7 +11,7 @@ export class AIPlugin {
 
   constructor(page: Page) {
     this.page = page;
-    this.appBarIcon = page.locator('#app-bar-icon-mattermost-ai');
+    this.appBarIcon = page.locator('#app-bar-icon-p2lab-agents');
     this.rhsPostTextarea = page.locator("#rhsContainer").locator('textarea');
     this.rhsSendButton = page.locator('#rhsContainer').getByTestId('SendMessageButton');
     this.regenerateButton = page.getByRole('button', { name: 'Regenerate' });
