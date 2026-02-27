@@ -199,7 +199,7 @@ func (p *Plugin) OnActivate() error {
 	}
 	p.configMigrated = true
 
-	bots := bots.New(p.API, pluginAPI, licenseChecker, &p.configuration, p.store, llmUpstreamHTTPClient, metricsService)
+	bots := bots.New(manifest.Id, p.API, pluginAPI, licenseChecker, &p.configuration, p.store, llmUpstreamHTTPClient, metricsService)
 
 	// migrateAndRefresh runs the one-time legacy bot migration, then forces
 	// a bot refresh only if the migration actually created new agents.
