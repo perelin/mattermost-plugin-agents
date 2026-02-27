@@ -5,11 +5,12 @@ import React, {useEffect, useState} from 'react';
 import styled from 'styled-components';
 
 import {useBotlist} from '@/bots';
+import manifest from '@/manifest';
 
 import TutorialTourTip, {useMeasurePunchouts, useShowTutorialStep} from './tutorial_tour_tip';
 import {AgentsTutorialSteps, TutorialTourCategories} from './tours';
 
-const AGENTS_ICON_ID = 'app-bar-icon-mattermost-ai';
+const AGENTS_ICON_ID = `app-bar-icon-${manifest.id}`;
 
 const TourContainer = styled.div`
     position: fixed;

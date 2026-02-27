@@ -7,6 +7,8 @@ import {GlobalState} from '@mattermost/types/store';
 import {PreferenceType} from '@mattermost/types/preferences';
 import {Client4 as Client4Class} from '@mattermost/client';
 
+import manifest from '@/manifest';
+
 import {FINISHED, TTCategoriesMapToSteps} from './tours';
 
 const Client4 = new Client4Class();
@@ -25,7 +27,7 @@ type PunchoutOffset = {
     height: number;
 };
 
-const PREFERENCE_CATEGORY = 'mattermost-ai-tutorial';
+const PREFERENCE_CATEGORY = `${manifest.id}-tutorial`;
 
 export function useMeasurePunchouts(
     elementIds: string[],

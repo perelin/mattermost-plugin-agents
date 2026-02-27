@@ -350,6 +350,7 @@ func (p *Plugin) OnActivate() error {
 	)
 
 	meetingsService := meetings.NewService(
+		manifestID,
 		pluginAPI,
 		streamingService,
 		prompts,
@@ -401,6 +402,7 @@ func (p *Plugin) OnActivate() error {
 	}
 
 	apiService := api.New(
+		manifestID,
 		bots,
 		conversationsService,
 		meetingsService,
