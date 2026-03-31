@@ -42,6 +42,7 @@ type PluginMCPHandlers struct {
 	// MCPHandler reads the active *mcp.Server on every request.
 	MCPHandler http.Handler
 
+	pluginID    string
 	siteURL     string
 	metadataURL string
 
@@ -84,6 +85,7 @@ func NewPluginMCPHandlers(
 	}
 
 	h := &PluginMCPHandlers{
+		pluginID:              pluginID,
 		siteURL:               siteURL,
 		internalURL:           internalURL,
 		logger:                logger,
@@ -134,7 +136,7 @@ func (h *PluginMCPHandlers) buildServer() *mcp.Server {
 	}
 
 	authProvider := auth.NewSessionAuthenticationProvider(h.siteURL, h.internalURL, h.logger)
-	pluginURL := strings.TrimRight(h.siteURL, "/") + "/plugins/mattermost-ai"
+	pluginURL := strings.TrimRight(h.siteURL, "/") + "/plugins/" + h.pluginID
 	searchService := tools.NewHTTPSemanticSearchService(pluginURL)
 	fileContentService := tools.NewHTTPFileContentService(pluginURL)
 
