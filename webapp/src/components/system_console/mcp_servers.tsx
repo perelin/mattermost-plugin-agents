@@ -351,7 +351,7 @@ const MCPServers = ({mcpConfig, onChange}: Props) => {
 
     // Tool-affecting config fingerprint (must be declared before prefetch effect)
     const configFingerprint = JSON.stringify({
-        servers: (mcpConfig?.servers || []).map((s) => ({url: s.baseURL, enabled: s.enabled})),
+        servers: (Array.isArray(mcpConfig?.servers) ? mcpConfig.servers : []).map((s) => ({url: s.baseURL, enabled: s.enabled})),
         embeddedEnabled: mcpConfig?.embeddedServer?.enabled,
         enablePluginServer: mcpConfig?.enablePluginServer,
     });
