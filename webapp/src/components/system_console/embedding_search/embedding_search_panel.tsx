@@ -35,8 +35,7 @@ interface Props {
 const EmbeddingSearchPanel = ({value, onChange}: Props) => {
     const intl = useIntl();
     const isBasicsLicensed = useIsBasicsLicensed();
-    const effectiveType = value.type || '';
-    const isEnabled = effectiveType !== '';
+    const isEnabled = value.type === 'composite';
 
     const {
         jobStatus,

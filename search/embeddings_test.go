@@ -60,6 +60,18 @@ func TestInitEmbeddingsSearch(t *testing.T) {
 			},
 		},
 		{
+			name: "legacy disabled type returns nil without error",
+			cfg: embeddings.EmbeddingSearchConfig{
+				Type:       "disabled",
+				Dimensions: 1536,
+			},
+			licensed:    true,
+			expectError: false,
+			validate: func(t *testing.T, search embeddings.EmbeddingSearch) {
+				require.Nil(t, search)
+			},
+		},
+		{
 			name: "missing license returns license error",
 			cfg: embeddings.EmbeddingSearchConfig{
 				Type:       embeddings.SearchTypeComposite,

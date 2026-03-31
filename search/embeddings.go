@@ -118,8 +118,9 @@ func mapEmbeddingProvider(provider string) (schemas.ModelProvider, error) {
 
 // InitEmbeddingsSearch creates and initializes the embedding search system
 func InitEmbeddingsSearch(db *sqlx.DB, httpClient *http.Client, cfg embeddings.EmbeddingSearchConfig, licenseChecker *enterprise.LicenseChecker) (embeddings.EmbeddingSearch, error) {
-	if cfg.Type == "" {
-		// Search is intentionally disabled, not an error
+	if cfg.Type == "" || cfg.Type == "disabled" {
+		// Search is intentionally disabled, not an error.
+		// "disabled" is a legacy value from older plugin versions.
 		return nil, nil
 	}
 
