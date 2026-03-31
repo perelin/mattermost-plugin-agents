@@ -26,7 +26,7 @@ type PluginMCPHandlers struct {
 
 // NewPluginMCPHandlers creates MCP handlers for use within a Mattermost plugin
 // The handlers expect requests to have an Authorization Bearer token injected by the plugin middleware
-func NewPluginMCPHandlers(siteURL, internalURL string, logger loggerlib.Logger) (*PluginMCPHandlers, error) {
+func NewPluginMCPHandlers(pluginID, siteURL, internalURL string, logger loggerlib.Logger) (*PluginMCPHandlers, error) {
 	if siteURL == "" {
 		return nil, fmt.Errorf("site URL cannot be empty")
 	}
@@ -66,7 +66,7 @@ func NewPluginMCPHandlers(siteURL, internalURL string, logger loggerlib.Logger) 
 	}
 
 	// Create HTTP search service for callback to plugin API
-	pluginURL := strings.TrimRight(siteURL, "/") + "/plugins/mattermost-ai"
+	pluginURL := strings.TrimRight(siteURL, "/") + "/plugins/" + pluginID
 	searchService := tools.NewHTTPSemanticSearchService(pluginURL)
 
 	// Register tools with remote access mode

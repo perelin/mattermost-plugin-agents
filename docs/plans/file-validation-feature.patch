@@ -1,0 +1,843 @@
+From b1553dcae1ef8d25801aa965ae8af1b09f54420e Mon Sep 17 00:00:00 2001
+From: Sebastian Patino-Lang <sebastian.patino-lang@posteo.net>
+Date: Thu, 26 Feb 2026 11:16:07 +0100
+Subject: [PATCH] feat: add early file validation with provider-specific
+ constraints
+
+Each LLM provider now declares a FileConstraints struct (supported image
+types, max sizes accounting for base64 inflation). PostToAIPost validates
+every attached file against these constraints before fetching content.
+Unsupported or oversized files produce a structured note in the message
+so the bot can inform the user, instead of being silently dropped or
+causing API errors.
+
+- Add FileConstraints struct and interface method to LanguageModel
+- Implement FileConstraints on Anthropic, OpenAI, Bedrock, ASage
+- Add FileConstraints delegation to all LanguageModel wrappers
+- Rewrite file loop in PostToAIPost with constraint-based validation
+- Add table-driven tests covering all validation paths
+- Remove redundant isValidImageType checks from providers
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ anthropic/anthropic.go                |  23 ++--
+ anthropic/anthropic_test.go           |   6 +-
+ api/fake_llm_test.go                  |   5 +
+ asage/asage.go                        |   8 ++
+ bedrock/bedrock.go                    |  28 ++---
+ bedrock/bedrock_test.go               |  36 ++----
+ conversations/conversations.go        |  92 +++++++++++++--
+ conversations/file_validation_test.go | 155 ++++++++++++++++++++++++++
+ llm/language_model.go                 |  15 +++
+ llm/logging.go                        |   8 ++
+ llm/mocks/language_model_mock.go      |  44 ++++++++
+ llm/token_tracking.go                 |   5 +
+ llm/token_tracking_bench_test.go      |   4 +
+ llm/token_tracking_test.go            |   5 +
+ llm/truncation.go                     |   4 +
+ mmtools/web_search_test.go            |   5 +-
+ openai/openai.go                      |  20 ++--
+ openai/openai_test.go                 |  27 +----
+ 18 files changed, 378 insertions(+), 112 deletions(-)
+ create mode 100644 conversations/file_validation_test.go
+
+diff --git a/anthropic/anthropic.go b/anthropic/anthropic.go
+index 4b5b4e9..1babf5e 100644
+--- a/anthropic/anthropic.go
++++ b/anthropic/anthropic.go
+@@ -61,15 +61,6 @@ func New(llmService llm.ServiceConfig, botConfig llm.BotConfig, httpClient *http
+ 	}
+ }
+ 
+-func isValidImageType(mimeType string) bool {
+-	switch mimeType {
+-	case "image/jpeg", "image/png", "image/gif", "image/webp":
+-		return true
+-	default:
+-		return false
+-	}
+-}
+-
+ // conversationToMessages creates a system prompt and a slice of input messages from conversation posts.
+ func conversationToMessages(posts []llm.Post) (string, []anthropicSDK.MessageParam) {
+ 	var systemMessage string
+@@ -142,11 +133,6 @@ func postRoleToAnthropicRole(role llm.PostRole) anthropicSDK.MessageParamRole {
+ func convertFilesToBlocks(files []llm.File) []anthropicSDK.ContentBlockParamUnion {
+ 	var blocks []anthropicSDK.ContentBlockParamUnion
+ 	for _, file := range files {
+-		if !isValidImageType(file.MimeType) {
+-			blocks = append(blocks, anthropicSDK.NewTextBlock(fmt.Sprintf("[Unsupported image type: %s]", file.MimeType)))
+-			continue
+-		}
+-
+ 		data, err := io.ReadAll(file.Reader)
+ 		if err != nil {
+ 			blocks = append(blocks, anthropicSDK.NewTextBlock("[Error reading image data]"))
+@@ -556,6 +542,15 @@ func (a *Anthropic) InputTokenLimit() int {
+ 	return 100000
+ }
+ 
++func (a *Anthropic) FileConstraints() llm.FileConstraints {
++	return llm.FileConstraints{
++		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
++		// Anthropic's 5MB limit is on the base64-encoded data, not raw bytes.
++		// Base64 inflates size by 4/3, so raw limit = 5MB * 3/4 ≈ 3.75MB.
++		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
++	}
++}
++
+ func (a *Anthropic) isNativeToolEnabled(toolName string) bool {
+ 	for _, enabledTool := range a.enabledNativeTools {
+ 		if enabledTool == toolName {
+diff --git a/anthropic/anthropic_test.go b/anthropic/anthropic_test.go
+index 8864bfa..111cd97 100644
+--- a/anthropic/anthropic_test.go
++++ b/anthropic/anthropic_test.go
+@@ -388,7 +388,7 @@ func TestConversationToMessages(t *testing.T) {
+ 			},
+ 		},
+ 		{
+-			name: "unsupported image type",
++			name: "image type passed through (pre-validated upstream)",
+ 			conversation: []llm.Post{
+ 				{Role: llm.PostRoleUser, Files: []llm.File{
+ 					{
+@@ -402,7 +402,7 @@ func TestConversationToMessages(t *testing.T) {
+ 				{
+ 					Role: anthropicSDK.MessageParamRoleUser,
+ 					Content: []anthropicSDK.ContentBlockParamUnion{
+-						anthropicSDK.NewTextBlock("[Unsupported image type: image/tiff]"),
++						anthropicSDK.NewImageBlockBase64("image/tiff", "ZmFrZS10aWZmLWRhdGE="),
+ 					},
+ 				},
+ 			},
+@@ -512,7 +512,7 @@ func TestConversationToMessages(t *testing.T) {
+ 					Content: []anthropicSDK.ContentBlockParamUnion{
+ 						anthropicSDK.NewTextBlock("Here are more:"),
+ 						anthropicSDK.NewImageBlockBase64("image/webp", "aW1hZ2UtMw=="),
+-						anthropicSDK.NewTextBlock("[Unsupported image type: image/tiff]"),
++						anthropicSDK.NewImageBlockBase64("image/tiff", "aW1hZ2UtNA=="),
+ 						anthropicSDK.NewImageBlockBase64("image/gif", "aW1hZ2UtNQ=="),
+ 					},
+ 				},
+diff --git a/api/fake_llm_test.go b/api/fake_llm_test.go
+index cc3cd42..f776cc6 100644
+--- a/api/fake_llm_test.go
++++ b/api/fake_llm_test.go
+@@ -86,6 +86,11 @@ func (f *FakeLLM) InputTokenLimit() int {
+ 	return 100000 // Default reasonable limit
+ }
+ 
++// FileConstraints returns default file constraints for testing
++func (f *FakeLLM) FileConstraints() llm.FileConstraints {
++	return llm.FileConstraints{}
++}
++
+ // NewFakeLLM creates a FakeLLM with a simple text response
+ func NewFakeLLM(response string) *FakeLLM {
+ 	return &FakeLLM{
+diff --git a/asage/asage.go b/asage/asage.go
+index ff8637a..19ddb01 100644
+--- a/asage/asage.go
++++ b/asage/asage.go
+@@ -105,3 +105,11 @@ func (s *Provider) CountTokens(text string) int {
+ func (s *Provider) InputTokenLimit() int {
+ 	return 200000
+ }
++
++func (s *Provider) FileConstraints() llm.FileConstraints {
++	return llm.FileConstraints{
++		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
++		// Conservative 5MB base64 limit → raw limit = 5MB * 3/4 ≈ 3.75MB.
++		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
++	}
++}
+diff --git a/bedrock/bedrock.go b/bedrock/bedrock.go
+index d7c452f..b5e8b08 100644
+--- a/bedrock/bedrock.go
++++ b/bedrock/bedrock.go
+@@ -115,17 +115,6 @@ func New(llmService llm.ServiceConfig, httpClient *http.Client) (*Bedrock, error
+ 	}, nil
+ }
+ 
+-// isValidImageType checks if the MIME type is supported by the Bedrock API
+-func isValidImageType(mimeType string) bool {
+-	validTypes := map[string]bool{
+-		"image/jpeg": true,
+-		"image/png":  true,
+-		"image/gif":  true,
+-		"image/webp": true,
+-	}
+-	return validTypes[mimeType]
+-}
+-
+ // conversationToMessages creates a system prompt and a slice of messages from conversation posts.
+ func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []types.Message) {
+ 	var systemBlocks []types.SystemContentBlock
+@@ -173,13 +162,6 @@ func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []typ
+ 		}
+ 
+ 		for _, file := range post.Files {
+-			if !isValidImageType(file.MimeType) {
+-				currentBlocks = append(currentBlocks, &types.ContentBlockMemberText{
+-					Value: fmt.Sprintf("[Unsupported image type: %s]", file.MimeType),
+-				})
+-				continue
+-			}
+-
+ 			data, err := io.ReadAll(file.Reader)
+ 			if err != nil {
+ 				currentBlocks = append(currentBlocks, &types.ContentBlockMemberText{
+@@ -188,7 +170,6 @@ func conversationToMessages(posts []llm.Post) ([]types.SystemContentBlock, []typ
+ 				continue
+ 			}
+ 
+-			// Determine format string from MIME type
+ 			var format types.ImageFormat
+ 			switch file.MimeType {
+ 			case "image/jpeg":
+@@ -612,3 +593,12 @@ func (b *Bedrock) InputTokenLimit() int {
+ 	// See: https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html
+ 	return 200000
+ }
++
++func (b *Bedrock) FileConstraints() llm.FileConstraints {
++	return llm.FileConstraints{
++		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
++		// Bedrock's limit is on base64-encoded data.
++		// Base64 inflates size by 4/3, so raw limit = 5MB * 3/4 ≈ 3.75MB.
++		MaxImageSize: 5 * 1024 * 1024 * 3 / 4,
++	}
++}
+diff --git a/bedrock/bedrock_test.go b/bedrock/bedrock_test.go
+index 3ff9d0a..885da87 100644
+--- a/bedrock/bedrock_test.go
++++ b/bedrock/bedrock_test.go
+@@ -16,28 +16,6 @@ import (
+ 	"github.com/mattermost/mattermost-plugin-ai/llm"
+ )
+ 
+-func TestIsValidImageType(t *testing.T) {
+-	tests := []struct {
+-		name     string
+-		mimeType string
+-		expected bool
+-	}{
+-		{"JPEG", "image/jpeg", true},
+-		{"PNG", "image/png", true},
+-		{"GIF", "image/gif", true},
+-		{"WebP", "image/webp", true},
+-		{"Invalid", "image/bmp", false},
+-		{"Invalid", "text/plain", false},
+-	}
+-
+-	for _, tt := range tests {
+-		t.Run(tt.name, func(t *testing.T) {
+-			result := isValidImageType(tt.mimeType)
+-			assert.Equal(t, tt.expected, result)
+-		})
+-	}
+-}
+-
+ func TestConversationToMessages(t *testing.T) {
+ 	t.Run("system and user messages", func(t *testing.T) {
+ 		posts := []llm.Post{
+@@ -130,15 +108,15 @@ func TestConversationToMessages(t *testing.T) {
+ 		assert.Equal(t, types.ImageFormatPng, imageBlock.Value.Format)
+ 	})
+ 
+-	t.Run("user message with unsupported image type", func(t *testing.T) {
++	t.Run("image type passed through (pre-validated upstream)", func(t *testing.T) {
+ 		posts := []llm.Post{
+ 			{
+ 				Role:    llm.PostRoleUser,
+ 				Message: "Check this file",
+ 				Files: []llm.File{
+ 					{
+-						MimeType: "image/bmp",
+-						Reader:   strings.NewReader("fake bmp data"),
++						MimeType: "image/png",
++						Reader:   strings.NewReader("fake png data"),
+ 					},
+ 				},
+ 			},
+@@ -148,12 +126,12 @@ func TestConversationToMessages(t *testing.T) {
+ 
+ 		require.Len(t, system, 0)
+ 		require.Len(t, messages, 1)
+-		require.Len(t, messages[0].Content, 2) // text + unsupported message
++		require.Len(t, messages[0].Content, 2) // text + image
+ 
+-		// Second block should be text indicating unsupported type
+-		textBlock, ok := messages[0].Content[1].(*types.ContentBlockMemberText)
++		// Second block should be an image block
++		imageBlock, ok := messages[0].Content[1].(*types.ContentBlockMemberImage)
+ 		require.True(t, ok)
+-		assert.Contains(t, textBlock.Value, "Unsupported image type")
++		assert.Equal(t, types.ImageFormatPng, imageBlock.Value.Format)
+ 	})
+ 
+ 	t.Run("tool use in assistant message", func(t *testing.T) {
+diff --git a/conversations/conversations.go b/conversations/conversations.go
+index 4aa9e43..a816994 100644
+--- a/conversations/conversations.go
++++ b/conversations/conversations.go
+@@ -338,8 +338,65 @@ func (c *Conversations) BotCreateNonResponsePost(botid string, requesterUserID s
+ 	return nil
+ }
+ 
+-func isImageMimeType(mimeType string) bool {
+-	return strings.HasPrefix(mimeType, "image/")
++func humanReadableSize(bytes int64) string {
++	const mb = 1024 * 1024
++	if bytes >= mb {
++		return fmt.Sprintf("%.0fMB", float64(bytes)/float64(mb))
++	}
++	const kb = 1024
++	return fmt.Sprintf("%.0fKB", float64(bytes)/float64(kb))
++}
++
++type skippedFile struct {
++	name   string
++	reason string
++}
++
++func formatSkippedFilesNote(skipped []skippedFile, supportedTypes []string) string {
++	if len(skipped) == 0 {
++		return ""
++	}
++	var b strings.Builder
++	b.WriteString("\n[Note: The following attached files could not be processed:\n")
++	for _, f := range skipped {
++		fmt.Fprintf(&b, "- %s (%s)\n", f.name, f.reason)
++	}
++
++	// Build human-readable type list from MIME types
++	typeNames := make([]string, 0, len(supportedTypes))
++	for _, t := range supportedTypes {
++		// "image/jpeg" -> "JPEG"
++		parts := strings.SplitN(t, "/", 2)
++		if len(parts) == 2 {
++			typeNames = append(typeNames, strings.ToUpper(parts[1]))
++		}
++	}
++	fmt.Fprintf(&b, "Only text files and images (%s) can be processed.]", strings.Join(typeNames, ", "))
++	return b.String()
++}
++
++func fileSkipReason(fileInfo *model.FileInfo, enableVision bool, constraints llm.FileConstraints) string {
++	isImage := strings.HasPrefix(fileInfo.MimeType, "image/")
++
++	if isImage && !enableVision {
++		return "image processing is not enabled"
++	}
++	if isImage && !constraints.HasSupportedImageType(fileInfo.MimeType) {
++		supported := make([]string, 0, len(constraints.SupportedImageTypes))
++		for _, t := range constraints.SupportedImageTypes {
++			parts := strings.SplitN(t, "/", 2)
++			if len(parts) == 2 {
++				supported = append(supported, strings.ToUpper(parts[1]))
++			}
++		}
++		return fmt.Sprintf("unsupported image format, supported: %s", strings.Join(supported, ", "))
++	}
++	if isImage && constraints.MaxImageSize > 0 && fileInfo.Size > constraints.MaxImageSize {
++		return fmt.Sprintf("image too large: %s, maximum: %s",
++			humanReadableSize(fileInfo.Size), humanReadableSize(constraints.MaxImageSize))
++	}
++
++	return "file type not supported"
+ }
+ 
+ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
+@@ -352,6 +409,9 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
+ 		maxFileSize = bot.GetConfig().MaxFileSize
+ 	}
+ 
++	constraints := bot.LLM().FileConstraints()
++	var skipped []skippedFile
++
+ 	for _, fileID := range post.FileIds {
+ 		fileInfo, err := c.mmClient.GetFileInfo(fileID)
+ 		if err != nil {
+@@ -378,14 +438,10 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
+ 			if int64(len(contentBytes)) == maxFileSize {
+ 				content += "\n... (content truncated due to size limit)"
+ 			}
+-		}
+-
+-		if content != "" {
+-			fileContent := fmt.Sprintf("File Name: %s\nContent: %s", fileInfo.Name, content)
+-			extractedFileContents = append(extractedFileContents, fileContent)
+-		}
+-
+-		if bot.GetConfig().EnableVision && isImageMimeType(fileInfo.MimeType) {
++		} else if bot.GetConfig().EnableVision && strings.HasPrefix(fileInfo.MimeType, "image/") &&
++			constraints.HasSupportedImageType(fileInfo.MimeType) &&
++			(constraints.MaxImageSize == 0 || fileInfo.Size <= constraints.MaxImageSize) {
++			// Valid image — fetch and add to upstream files
+ 			file, err := c.mmClient.GetFile(fileID)
+ 			if err != nil {
+ 				c.mmClient.LogError("Error getting file", "error", err)
+@@ -396,6 +452,17 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
+ 				MimeType: fileInfo.MimeType,
+ 				Size:     fileInfo.Size,
+ 			})
++		} else if strings.TrimSpace(fileInfo.Content) == "" && !strings.HasPrefix(fileInfo.MimeType, "text/") {
++			// File is not text, not server-extracted, and not a valid image — skip with reason
++			skipped = append(skipped, skippedFile{
++				name:   fileInfo.Name,
++				reason: fileSkipReason(fileInfo, bot.GetConfig().EnableVision, constraints),
++			})
++		}
++
++		if content != "" {
++			fileContent := fmt.Sprintf("File Name: %s\nContent: %s", fileInfo.Name, content)
++			extractedFileContents = append(extractedFileContents, fileContent)
+ 		}
+ 	}
+ 
+@@ -404,6 +471,11 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
+ 		message += "\nAttached File Contents:\n" + strings.Join(extractedFileContents, "\n\n")
+ 	}
+ 
++	// Add note about skipped files
++	if note := formatSkippedFilesNote(skipped, constraints.SupportedImageTypes); note != "" {
++		message += note
++	}
++
+ 	role := llm.PostRoleUser
+ 	if c.bots.IsAnyBot(post.UserId) {
+ 		role = llm.PostRoleBot
+diff --git a/conversations/file_validation_test.go b/conversations/file_validation_test.go
+new file mode 100644
+index 0000000..ee641dc
+--- /dev/null
++++ b/conversations/file_validation_test.go
+@@ -0,0 +1,155 @@
++// Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
++// See LICENSE.txt for license information.
++
++package conversations_test
++
++import (
++	"bytes"
++	"io"
++	"testing"
++
++	"github.com/mattermost/mattermost-plugin-ai/bots"
++	"github.com/mattermost/mattermost-plugin-ai/conversations"
++	"github.com/mattermost/mattermost-plugin-ai/i18n"
++	"github.com/mattermost/mattermost-plugin-ai/llm"
++	llmmocks "github.com/mattermost/mattermost-plugin-ai/llm/mocks"
++	"github.com/mattermost/mattermost-plugin-ai/mmapi/mocks"
++	"github.com/mattermost/mattermost/server/public/model"
++	"github.com/stretchr/testify/assert"
++)
++
++func TestPostToAIPost_FileValidation(t *testing.T) {
++	constraints := llm.FileConstraints{
++		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
++		MaxImageSize:        5 * 1024 * 1024 * 3 / 4, // ~3.75MB raw (accounts for base64 inflation to 5MB)
++	}
++
++	tests := []struct {
++		name              string
++		fileInfos         []*model.FileInfo
++		enableVision      bool
++		expectFiles       int    // number of llm.File in result
++		expectContains    string // substring expected in result.Message
++		expectNotContains string // substring NOT expected in result.Message
++	}{
++		{
++			name: "supported image within size limit passes through",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "photo.jpg", MimeType: "image/jpeg", Size: 1024},
++			},
++			enableVision:      true,
++			expectFiles:       1,
++			expectNotContains: "[Note:",
++		},
++		{
++			name: "unsupported image format produces note",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "photo.tiff", MimeType: "image/tiff", Size: 1024},
++			},
++			enableVision:   true,
++			expectFiles:    0,
++			expectContains: "unsupported image format",
++		},
++		{
++			name: "oversized image produces note",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "huge.png", MimeType: "image/png", Size: 10 * 1024 * 1024},
++			},
++			enableVision:   true,
++			expectFiles:    0,
++			expectContains: "image too large",
++		},
++		{
++			name: "video file produces note",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "meeting.mp4", MimeType: "video/mp4", Size: 1024},
++			},
++			enableVision:   true,
++			expectFiles:    0,
++			expectContains: "file type not supported",
++		},
++		{
++			name: "image with vision disabled produces note",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "photo.jpg", MimeType: "image/jpeg", Size: 1024},
++			},
++			enableVision:   false,
++			expectFiles:    0,
++			expectContains: "image processing is not enabled",
++		},
++		{
++			name: "text file still works",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "readme.txt", MimeType: "text/plain", Size: 100},
++			},
++			enableVision:      true,
++			expectFiles:       0, // text files go into message, not Files
++			expectContains:    "readme.txt",
++			expectNotContains: "[Note:",
++		},
++		{
++			name: "mix of supported and unsupported produces note for unsupported only",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "photo.jpg", MimeType: "image/jpeg", Size: 1024},
++				{Id: "f2", Name: "video.mp4", MimeType: "video/mp4", Size: 1024},
++			},
++			enableVision:   true,
++			expectFiles:    1,
++			expectContains: "video.mp4",
++		},
++		{
++			name: "file with server-extracted content processed as text",
++			fileInfos: []*model.FileInfo{
++				{Id: "f1", Name: "document.pdf", MimeType: "application/pdf", Size: 1024, Content: "Extracted PDF text content"},
++			},
++			enableVision:      true,
++			expectFiles:       0,
++			expectContains:    "Extracted PDF text content",
++			expectNotContains: "[Note:",
++		},
++	}
++
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			mmClient := mocks.NewMockClient(t)
++			mockLLM := llmmocks.NewMockLanguageModel(t)
++			mockLLM.On("FileConstraints").Return(constraints).Maybe()
++
++			botConfig := llm.BotConfig{
++				ID:           "botid",
++				Name:         "testbot",
++				DisplayName:  "Test Bot",
++				EnableVision: tc.enableVision,
++				ServiceID:    "test-service",
++			}
++			serviceConfig := llm.ServiceConfig{ID: "test-service", Type: llm.ServiceTypeOpenAI}
++			mmBot := &model.Bot{UserId: "botid"}
++			bot := bots.NewBot(botConfig, serviceConfig, mmBot, mockLLM)
++
++			post := &model.Post{
++				Id:      "post1",
++				Message: "test message",
++				FileIds: make([]string, len(tc.fileInfos)),
++			}
++			for i, fi := range tc.fileInfos {
++				post.FileIds[i] = fi.Id
++				mmClient.On("GetFileInfo", fi.Id).Return(fi, nil)
++				fileContent := []byte("file content for " + fi.Name)
++				mmClient.On("GetFile", fi.Id).Return(io.NopCloser(bytes.NewReader(fileContent)), nil).Maybe()
++			}
++
++			botService := bots.New(nil, nil, nil, nil, nil, nil, nil)
++			conv := conversations.New(nil, mmClient, nil, nil, botService, nil, nil, i18n.Init(), nil, nil)
++
++			result := conv.PostToAIPost(bot, post)
++
++			assert.Equal(t, tc.expectFiles, len(result.Files), "unexpected number of files")
++			if tc.expectContains != "" {
++				assert.Contains(t, result.Message, tc.expectContains)
++			}
++			if tc.expectNotContains != "" {
++				assert.NotContains(t, result.Message, tc.expectNotContains)
++			}
++		})
++	}
++}
+diff --git a/llm/language_model.go b/llm/language_model.go
+index 90380d8..04d36e1 100644
+--- a/llm/language_model.go
++++ b/llm/language_model.go
+@@ -21,6 +21,8 @@
+ package llm
+ 
+ import (
++	"slices"
++
+ 	"github.com/google/jsonschema-go/jsonschema"
+ )
+ 
+@@ -30,6 +32,19 @@ type LanguageModel interface {
+ 
+ 	CountTokens(text string) int
+ 	InputTokenLimit() int
++	FileConstraints() FileConstraints
++}
++
++// FileConstraints describes the file types and sizes a provider supports.
++type FileConstraints struct {
++	SupportedImageTypes []string // MIME types, e.g. ["image/jpeg", "image/png"]
++	MaxImageSize        int64    // bytes, 0 = no plugin-side limit
++	MaxTextFileSize     int64    // bytes, 0 = use defaultMaxFileSize (5MB)
++}
++
++// HasSupportedImageType checks if the given MIME type is in the supported list.
++func (fc FileConstraints) HasSupportedImageType(mimeType string) bool {
++	return slices.Contains(fc.SupportedImageTypes, mimeType)
+ }
+ 
+ type LanguageModelConfig struct {
+diff --git a/llm/logging.go b/llm/logging.go
+index 507951c..d38034a 100644
+--- a/llm/logging.go
++++ b/llm/logging.go
+@@ -45,6 +45,10 @@ func (w *LanguageModelLogWrapper) InputTokenLimit() int {
+ 	return w.wrapped.InputTokenLimit()
+ }
+ 
++func (w *LanguageModelLogWrapper) FileConstraints() FileConstraints {
++	return w.wrapped.FileConstraints()
++}
++
+ type LanguageModelTestLogWrapper struct {
+ 	t       *testing.T
+ 	wrapped LanguageModel
+@@ -79,3 +83,7 @@ func (w *LanguageModelTestLogWrapper) CountTokens(text string) int {
+ func (w *LanguageModelTestLogWrapper) InputTokenLimit() int {
+ 	return w.wrapped.InputTokenLimit()
+ }
++
++func (w *LanguageModelTestLogWrapper) FileConstraints() FileConstraints {
++	return w.wrapped.FileConstraints()
++}
+diff --git a/llm/mocks/language_model_mock.go b/llm/mocks/language_model_mock.go
+index 8629de5..17a8294 100644
+--- a/llm/mocks/language_model_mock.go
++++ b/llm/mocks/language_model_mock.go
+@@ -209,6 +209,50 @@ func (_c *MockLanguageModel_CountTokens_Call) RunAndReturn(run func(text string)
+ 	return _c
+ }
+ 
++// FileConstraints provides a mock function for the type MockLanguageModel
++func (_mock *MockLanguageModel) FileConstraints() llm.FileConstraints {
++	ret := _mock.Called()
++
++	if len(ret) == 0 {
++		panic("no return value specified for FileConstraints")
++	}
++
++	var r0 llm.FileConstraints
++	if returnFunc, ok := ret.Get(0).(func() llm.FileConstraints); ok {
++		r0 = returnFunc()
++	} else {
++		r0 = ret.Get(0).(llm.FileConstraints)
++	}
++	return r0
++}
++
++// MockLanguageModel_FileConstraints_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FileConstraints'
++type MockLanguageModel_FileConstraints_Call struct {
++	*mock.Call
++}
++
++// FileConstraints is a helper method to define mock.On call
++func (_e *MockLanguageModel_Expecter) FileConstraints() *MockLanguageModel_FileConstraints_Call {
++	return &MockLanguageModel_FileConstraints_Call{Call: _e.mock.On("FileConstraints")}
++}
++
++func (_c *MockLanguageModel_FileConstraints_Call) Run(run func()) *MockLanguageModel_FileConstraints_Call {
++	_c.Call.Run(func(args mock.Arguments) {
++		run()
++	})
++	return _c
++}
++
++func (_c *MockLanguageModel_FileConstraints_Call) Return(fileConstraints llm.FileConstraints) *MockLanguageModel_FileConstraints_Call {
++	_c.Call.Return(fileConstraints)
++	return _c
++}
++
++func (_c *MockLanguageModel_FileConstraints_Call) RunAndReturn(run func() llm.FileConstraints) *MockLanguageModel_FileConstraints_Call {
++	_c.Call.Return(run)
++	return _c
++}
++
+ // InputTokenLimit provides a mock function for the type MockLanguageModel
+ func (_mock *MockLanguageModel) InputTokenLimit() int {
+ 	ret := _mock.Called()
+diff --git a/llm/token_tracking.go b/llm/token_tracking.go
+index b6363cb..413a17a 100644
+--- a/llm/token_tracking.go
++++ b/llm/token_tracking.go
+@@ -161,3 +161,8 @@ func (w *TokenUsageLoggingWrapper) CountTokens(text string) int {
+ func (w *TokenUsageLoggingWrapper) InputTokenLimit() int {
+ 	return w.wrapped.InputTokenLimit()
+ }
++
++// FileConstraints delegates to the wrapped model
++func (w *TokenUsageLoggingWrapper) FileConstraints() FileConstraints {
++	return w.wrapped.FileConstraints()
++}
+diff --git a/llm/token_tracking_bench_test.go b/llm/token_tracking_bench_test.go
+index ed4ca01..7475018 100644
+--- a/llm/token_tracking_bench_test.go
++++ b/llm/token_tracking_bench_test.go
+@@ -35,6 +35,10 @@ func (f *benchFakeLLM) InputTokenLimit() int {
+ 	return 100000
+ }
+ 
++func (f *benchFakeLLM) FileConstraints() FileConstraints {
++	return FileConstraints{}
++}
++
+ // BenchmarkTokenTracking benchmarks the TokenUsageLoggingWrapper performance.
+ func BenchmarkTokenTracking(b *testing.B) {
+ 	logger, err := CreateTokenLogger()
+diff --git a/llm/token_tracking_test.go b/llm/token_tracking_test.go
+index 59d917f..037546d 100644
+--- a/llm/token_tracking_test.go
++++ b/llm/token_tracking_test.go
+@@ -37,6 +37,11 @@ func (m *MockLanguageModel) InputTokenLimit() int {
+ 	return args.Int(0)
+ }
+ 
++func (m *MockLanguageModel) FileConstraints() FileConstraints {
++	args := m.Called()
++	return args.Get(0).(FileConstraints)
++}
++
+ func TestTokenTrackingWrapper_ChatCompletion(t *testing.T) {
+ 	t.Run("filters usage events from stream", func(t *testing.T) {
+ 		mockLLM := &MockLanguageModel{}
+diff --git a/llm/truncation.go b/llm/truncation.go
+index 33a3204..fd656b7 100644
+--- a/llm/truncation.go
++++ b/llm/truncation.go
+@@ -40,3 +40,7 @@ func (w *TruncationWrapper) CountTokens(text string) int {
+ func (w *TruncationWrapper) InputTokenLimit() int {
+ 	return w.wrapped.InputTokenLimit()
+ }
++
++func (w *TruncationWrapper) FileConstraints() FileConstraints {
++	return w.wrapped.FileConstraints()
++}
+diff --git a/mmtools/web_search_test.go b/mmtools/web_search_test.go
+index 2fe61d9..44151ee 100644
+--- a/mmtools/web_search_test.go
++++ b/mmtools/web_search_test.go
+@@ -620,5 +620,6 @@ func (m *mockLanguageModel) ChatCompletion(conversation llm.CompletionRequest, o
+ func (m *mockLanguageModel) ChatCompletionNoStream(conversation llm.CompletionRequest, opts ...llm.LanguageModelOption) (string, error) {
+ 	return "Summarized content", nil
+ }
+-func (m *mockLanguageModel) CountTokens(text string) int { return 0 }
+-func (m *mockLanguageModel) InputTokenLimit() int        { return 1000 }
++func (m *mockLanguageModel) CountTokens(text string) int          { return 0 }
++func (m *mockLanguageModel) InputTokenLimit() int                 { return 1000 }
++func (m *mockLanguageModel) FileConstraints() llm.FileConstraints { return llm.FileConstraints{} }
+diff --git a/openai/openai.go b/openai/openai.go
+index 1f3ec6c..6860707 100644
+--- a/openai/openai.go
++++ b/openai/openai.go
+@@ -283,17 +283,6 @@ func postsToChatCompletionMessages(posts []llm.Post) []openai.ChatCompletionMess
+ 				}
+ 
+ 				for _, file := range post.Files {
+-					if file.MimeType != "image/png" &&
+-						file.MimeType != "image/jpeg" &&
+-						file.MimeType != "image/gif" &&
+-						file.MimeType != "image/webp" {
+-						parts = append(parts, openai.TextContentPart("User submitted image was not a supported format. Tell the user this."))
+-						continue
+-					}
+-					if file.Size > OpenAIMaxImageSize {
+-						parts = append(parts, openai.TextContentPart("User submitted an image larger than 20MB. Tell the user this."))
+-						continue
+-					}
+ 					fileBytes, err := io.ReadAll(file.Reader)
+ 					if err != nil {
+ 						continue
+@@ -1294,6 +1283,15 @@ func (s *OpenAI) InputTokenLimit() int {
+ 	return 128000 // Default fallback
+ }
+ 
++func (s *OpenAI) FileConstraints() llm.FileConstraints {
++	return llm.FileConstraints{
++		SupportedImageTypes: []string{"image/jpeg", "image/png", "image/gif", "image/webp"},
++		// OpenAI's 20MB limit is on base64-encoded data.
++		// Base64 inflates size by 4/3, so raw limit = 20MB * 3/4 = 15MB.
++		MaxImageSize: OpenAIMaxImageSize * 3 / 4,
++	}
++}
++
+ func (s *OpenAI) CreateEmbedding(ctx context.Context, text string) ([]float32, error) {
+ 	params := openai.EmbeddingNewParams{
+ 		Input: openai.EmbeddingNewParamsInputUnion{
+diff --git a/openai/openai_test.go b/openai/openai_test.go
+index 041bb51..842f306 100644
+--- a/openai/openai_test.go
++++ b/openai/openai_test.go
+@@ -81,14 +81,14 @@ func TestPostsToChatCompletionMessages(t *testing.T) {
+ 			},
+ 		},
+ 		{
+-			name: "unsupported image type",
++			name: "image passed through (pre-validated upstream)",
+ 			posts: []llm.Post{
+ 				{
+ 					Role: llm.PostRoleUser,
+ 					Files: []llm.File{
+ 						{
+-							MimeType: "image/tiff",
+-							Reader:   bytes.NewReader([]byte("fake-tiff-data")),
++							MimeType: "image/png",
++							Reader:   bytes.NewReader([]byte("fake-png-data")),
+ 							Size:     14,
+ 						},
+ 					},
+@@ -99,27 +99,6 @@ func TestPostsToChatCompletionMessages(t *testing.T) {
+ 				assert.NotNil(t, messages[0].OfUser)
+ 			},
+ 		},
+-		{
+-			name: "oversized image",
+-			posts: []llm.Post{
+-				{
+-					Role:    llm.PostRoleUser,
+-					Message: "Check this huge image:",
+-					Files: []llm.File{
+-						{
+-							MimeType: "image/jpeg",
+-							Reader:   bytes.NewReader([]byte("fake-image-data")),
+-							Size:     OpenAIMaxImageSize + 1, // Over 20MB
+-						},
+-					},
+-				},
+-			},
+-			check: func(t *testing.T, messages []openai.ChatCompletionMessageParamUnion) {
+-				require.Len(t, messages, 1)
+-				assert.NotNil(t, messages[0].OfUser)
+-				// Should have a message about the image being too large
+-			},
+-		},
+ 		{
+ 			name: "assistant message with tool calls",
+ 			posts: []llm.Post{
+-- 
+2.53.0
+

@@ -116,7 +116,7 @@ func TestRespondToPostCreatesPlaceholderBeforeStartupCompletes(t *testing.T) {
 	}
 
 	require.NotNil(t, createdPost)
-	require.Equal(t, "custom_llmbot", createdPost.Type)
+	require.Equal(t, "custom_p2lab_agents_bot", createdPost.Type)
 	require.Equal(t, "", createdPost.Message)
 	require.Equal(t, "user-id", createdPost.GetProp(streaming.LLMRequesterUserID))
 	require.Equal(t, "original-post-id", createdPost.GetProp(streaming.RespondingToProp))
