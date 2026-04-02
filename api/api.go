@@ -185,6 +185,7 @@ func (a *API) ServeHTTP(c *plugin.Context, w http.ResponseWriter, r *http.Reques
 	// Raw search endpoint returns enriched semantic search results without LLM processing.
 	// Used by the MCP server for external search callbacks.
 	router.POST("/search/raw", a.handleRawSearch)
+	router.POST("/actions/tool_approval", a.handleToolApprovalAction)
 
 	botRequiredRouter := router.Group("")
 	botRequiredRouter.Use(a.aiBotRequired)

@@ -386,7 +386,7 @@ Currently integrations are limited to direct messages between users and the agen
 - **Access**: Works with both public and private repositories (based on user permissions)
 - **Data Retrieved**: Issue/PR title, number, state, submitter, body content
 
-**Security Note**: Built-in tool integrations (GitHub, Jira, user lookup) are available in direct messages. MCP tools can also be used in channels when channel tool calling is enabled. Per-tool approval policies control whether tools require explicit user approval before execution — see [Tool Approval Policies](#tool-approval-policies) for details.
+**Security Note**: Built-in tool integrations (GitHub, Jira, user lookup) are available in direct messages. MCP tools can also be used in channels when channel tool calling is enabled. Per-tool approval policies control whether tools require explicit user approval before execution — see [Tool Approval Policies](#tool-approval-policies) for details. Tool approval buttons use Mattermost post actions, so the same approve/reject and share/keep-private flow works from web and mobile clients.
 
 ## Model Context Protocol (MCP) Integration
 

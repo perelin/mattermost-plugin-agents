@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin/render"
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/conversations"
+	plugini18n "github.com/mattermost/mattermost-plugin-ai/i18n"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost-plugin-ai/react"
@@ -446,6 +447,125 @@ func (a *API) handleToolResult(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+func (a *API) handleToolApprovalAction(c *gin.Context) {
+	var req model.PostActionIntegrationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.AbortWithError(http.StatusBadRequest, err)
+		return
+	}
+
+	userLocale := "en"
+	if user, err := a.pluginAPI.User.Get(req.UserId); err == nil && user != nil && user.Locale != "" {
+		userLocale = user.Locale
+	}
+	T := plugini18n.LocalizerFunc(a.i18nBundle, userLocale)
+	respond := func(text string) {
+		c.JSON(http.StatusOK, &model.PostActionIntegrationResponse{EphemeralText: text})
+	}
+
+	post, err := a.pluginAPI.Post.GetPost(req.PostId)
+	if err != nil || post == nil {
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+
+	if post.GetProp(streaming.LLMRequesterUserID) != req.UserId {
+		respond(T("agents.tool_approval.not_authorized", "Only the person who triggered this can approve."))
+		return
+	}
+
+	channel, err := a.pluginAPI.Channel.Get(post.ChannelId)
+	if err != nil || channel == nil {
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+
+	if !a.licenseChecker.IsBasicsLicensed() {
+		respond("feature not licensed")
+		return
+	}
+
+	stage, action, toolIDs, ok := parseToolApprovalContext(req.Context)
+	if !ok {
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+
+	streaming.ClearApprovalAttachments(post)
+	if err := a.pluginAPI.Post.UpdatePost(post); err != nil {
+		respond(err.Error())
+		return
+	}
+
+	var actionErr error
+	var successText string
+	switch {
+	case stage == "call" && action == "accept_all":
+		actionErr = a.conversationsService.HandleToolCall(req.UserId, post, channel, toolIDs)
+		successText = T("agents.tool_approval.approved", "Tools approved. Processing...")
+	case stage == "call" && action == "reject_all":
+		actionErr = a.conversationsService.HandleToolCall(req.UserId, post, channel, []string{})
+		successText = T("agents.tool_approval.rejected", "Tools rejected.")
+	case stage == "result" && action == "share_results":
+		actionErr = a.conversationsService.HandleToolResult(req.UserId, post, channel, toolIDs)
+		successText = T("agents.tool_approval.shared", "Results shared.")
+	case stage == "result" && action == "keep_private":
+		actionErr = a.conversationsService.HandleToolResult(req.UserId, post, channel, []string{})
+		successText = T("agents.tool_approval.kept_private", "Results kept private.")
+	default:
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+
+	if actionErr != nil {
+		switch actionErr.Error() {
+		case "post missing pending tool calls", "post pending tool calls not valid JSON", "post missing pending tool results", "post pending tool results not valid JSON":
+			respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		case "only the original requester can approve/reject tool calls", "only the original requester can approve/reject tool results":
+			respond(T("agents.tool_approval.not_authorized", "Only the person who triggered this can approve."))
+		default:
+			respond(actionErr.Error())
+		}
+		return
+	}
+
+	respond(successText)
+}
+
+func parseToolApprovalContext(context map[string]any) (string, string, []string, bool) {
+	stage, ok := context["stage"].(string)
+	if !ok || stage == "" {
+		return "", "", nil, false
+	}
+
+	action, ok := context["action"].(string)
+	if !ok || action == "" {
+		return "", "", nil, false
+	}
+
+	rawToolIDs, ok := context["tool_ids"]
+	if !ok {
+		return "", "", nil, false
+	}
+
+	switch values := rawToolIDs.(type) {
+	case []string:
+		return stage, action, append([]string(nil), values...), true
+	case []any:
+		toolIDs := make([]string, 0, len(values))
+		for _, value := range values {
+			toolID, ok := value.(string)
+			if !ok || toolID == "" {
+				return "", "", nil, false
+			}
+			toolIDs = append(toolIDs, toolID)
+		}
+		return stage, action, toolIDs, true
+	default:
+		return "", "", nil, false
+	}
 }
 
 func (a *API) handlePostbackSummary(c *gin.Context) {
