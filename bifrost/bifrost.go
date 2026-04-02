@@ -29,6 +29,64 @@ const (
 	DefaultStreamingTimeout = 5 * time.Minute
 )
 
+// formatBifrostError builds a detailed error message from a BifrostError,
+// including status code, error type, provider, model, and raw response
+// so that server logs contain enough context to diagnose upstream failures.
+func formatBifrostError(be *schemas.BifrostError) error {
+	var parts []string
+
+	// Message (always present)
+	if be.Error != nil {
+		parts = append(parts, be.Error.Message)
+	}
+
+	// HTTP status code
+	if be.StatusCode != nil {
+		parts = append(parts, fmt.Sprintf("status_code=%d", *be.StatusCode))
+	}
+
+	// Error type (e.g. "overloaded_error", "rate_limit_error")
+	if be.Error != nil && be.Error.Type != nil && *be.Error.Type != "" {
+		parts = append(parts, fmt.Sprintf("error_type=%s", *be.Error.Type))
+	}
+
+	// Error code (some providers return a separate code field)
+	if be.Error != nil && be.Error.Code != nil && *be.Error.Code != "" {
+		parts = append(parts, fmt.Sprintf("error_code=%s", *be.Error.Code))
+	}
+
+	// Provider and model
+	if be.ExtraFields.Provider != "" {
+		parts = append(parts, fmt.Sprintf("provider=%s", be.ExtraFields.Provider))
+	}
+	if be.ExtraFields.ModelRequested != "" {
+		parts = append(parts, fmt.Sprintf("model=%s", be.ExtraFields.ModelRequested))
+	}
+
+	// Request type (chat, responses, etc.)
+	if be.ExtraFields.RequestType != "" {
+		parts = append(parts, fmt.Sprintf("request_type=%s", string(be.ExtraFields.RequestType)))
+	}
+
+	// Whether this is a Bifrost-internal error vs upstream
+	if be.IsBifrostError {
+		parts = append(parts, "origin=bifrost")
+	} else {
+		parts = append(parts, "origin=upstream")
+	}
+
+	// Raw response (truncated for log safety)
+	if be.ExtraFields.RawResponse != nil {
+		raw := fmt.Sprintf("%v", be.ExtraFields.RawResponse)
+		if len(raw) > 500 {
+			raw = raw[:500] + "...(truncated)"
+		}
+		parts = append(parts, fmt.Sprintf("raw_response=%s", raw))
+	}
+
+	return fmt.Errorf("stream error: %s", strings.Join(parts, " | "))
+}
+
 // LLM implements the llm.LanguageModel interface using the Bifrost gateway.
 type LLM struct {
 	client           *bifrostcore.Bifrost
@@ -348,7 +406,7 @@ func (b *LLM) streamChat(request llm.CompletionRequest, cfg llm.LanguageModelCon
 		if chunk.BifrostError != nil {
 			output <- llm.TextStreamEvent{
 				Type:  llm.EventTypeError,
-				Value: fmt.Errorf("stream error: %s", chunk.BifrostError.Error.Message),
+				Value: formatBifrostError(chunk.BifrostError),
 			}
 			return
 		}
@@ -1287,7 +1345,7 @@ func (b *LLM) streamResponses(request llm.CompletionRequest, cfg llm.LanguageMod
 		if chunk.BifrostError != nil {
 			output <- llm.TextStreamEvent{
 				Type:  llm.EventTypeError,
-				Value: fmt.Errorf("stream error: %s", chunk.BifrostError.Error.Message),
+				Value: formatBifrostError(chunk.BifrostError),
 			}
 			return
 		}
