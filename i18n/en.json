@@ -30,5 +30,53 @@
   {
     "id": "agents.summarize_transcription",
     "translation": "Sure, I will summarize this transcription: %s/_redirect/pl/%s\n"
+  },
+  {
+    "id": "agents.tool_approval.accept_all",
+    "translation": "Accept All"
+  },
+  {
+    "id": "agents.tool_approval.approved",
+    "translation": "Tools approved. Processing..."
+  },
+  {
+    "id": "agents.tool_approval.call_description",
+    "translation": "Agents wants to run: %s"
+  },
+  {
+    "id": "agents.tool_approval.keep_private",
+    "translation": "Keep Private"
+  },
+  {
+    "id": "agents.tool_approval.kept_private",
+    "translation": "Results kept private."
+  },
+  {
+    "id": "agents.tool_approval.not_authorized",
+    "translation": "Only the person who triggered this can approve."
+  },
+  {
+    "id": "agents.tool_approval.not_available",
+    "translation": "This tool approval is no longer available."
+  },
+  {
+    "id": "agents.tool_approval.reject_all",
+    "translation": "Reject All"
+  },
+  {
+    "id": "agents.tool_approval.rejected",
+    "translation": "Tools rejected."
+  },
+  {
+    "id": "agents.tool_approval.result_description",
+    "translation": "Tool results are ready for review"
+  },
+  {
+    "id": "agents.tool_approval.share_results",
+    "translation": "Share Results"
+  },
+  {
+    "id": "agents.tool_approval.shared",
+    "translation": "Results shared."
   }
 ]
