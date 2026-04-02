@@ -386,7 +386,9 @@ func (p *Plugin) OnActivate() error {
 	})
 	streamingService.SetToolPolicyChecker(policyChecker)
 	streamingService.SetAutoExecuteCallback(conversationsService.AutoExecuteApprovedToolCalls)
+	streamingService.SetPluginID(manifestID)
 	conversationsService.SetToolPolicyChecker(policyChecker)
+	conversationsService.SetPluginID(manifestID)
 
 	// Initialize embedded MCP server handlers for plugin endpoints
 	var mcpHandlers *mcpserver.PluginMCPHandlers

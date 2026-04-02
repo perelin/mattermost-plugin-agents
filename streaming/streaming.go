@@ -101,6 +101,7 @@ type MMPostStreamService struct {
 	contextsMutex       sync.Mutex
 	mmClient            Client
 	i18n                *i18n.Bundle
+	pluginID            string
 	toolPolicyChecker   ToolPolicyChecker
 	autoExecuteCallback AutoExecuteCallback
 }
@@ -111,6 +112,11 @@ func NewMMPostStreamService(mmClient Client, i18n *i18n.Bundle) *MMPostStreamSer
 		mmClient: mmClient,
 		i18n:     i18n,
 	}
+}
+
+// SetPluginID sets the plugin ID used for building PostAction integration URLs.
+func (p *MMPostStreamService) SetPluginID(pluginID string) {
+	p.pluginID = pluginID
 }
 
 // SetToolPolicyChecker sets the tool policy checker for the streaming service.

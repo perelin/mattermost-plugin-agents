@@ -58,6 +58,7 @@ type Conversations struct {
 	i18n              *i18n.Bundle
 	meetingsService   MeetingsService
 	configProvider    ConfigProvider
+	pluginID          string
 	toolPolicyChecker streaming.ToolPolicyChecker
 }
 
@@ -96,6 +97,11 @@ func New(
 // SetMeetingsService sets the meetings service (used to break circular dependency during initialization)
 func (c *Conversations) SetMeetingsService(meetingsService MeetingsService) {
 	c.meetingsService = meetingsService
+}
+
+// SetPluginID sets the plugin ID used for building PostAction integration URLs.
+func (c *Conversations) SetPluginID(pluginID string) {
+	c.pluginID = pluginID
 }
 
 // SetToolPolicyChecker sets the per-tool policy checker used for auto-approval
