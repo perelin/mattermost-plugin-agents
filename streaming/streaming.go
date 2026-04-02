@@ -619,6 +619,13 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 							post.AddProp(ToolCallProp, string(toolCallJSON))
 						}
 
+						if !autoApproved {
+							T := i18n.LocalizerFunc(p.i18n, userLocale)
+							if attachments := ToolCallApprovalAttachments(p.pluginID, toolCalls, T); attachments != nil {
+								post.AddProp(model.PostPropsAttachments, attachments)
+							}
+						}
+
 						if updErr := p.mmClient.UpdatePost(post); updErr != nil {
 							p.mmClient.LogError("Failed to update post with tool call", "error", updErr)
 						}
