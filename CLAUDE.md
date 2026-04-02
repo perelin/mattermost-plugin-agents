@@ -55,6 +55,15 @@ Write tests that verify behavior which could actually break due to bugs in our c
 - All text formatting of Mattermost entities (posts, users, channels, teams, members) for LLM consumption or tool output must go through the `format/` package
 - Never format Mattermost model types inline with `fmt.Sprintf` — add a formatter to `format/` instead
 
+## Tool Approval Architecture (P2Lab patch)
+- Channel tool calls have two approval stages: **call approval** (should the tool run?) and **result sharing** (should results be visible in the channel?)
+- Per-tool policy (`auto_run` / `ask`) is configured in `config/mcp_config.go` and stored in `MCPToolConfig`
+- The policy checker is wired in `server/main.go` and consumed by both `streaming/streaming.go` and `conversations/tool_handling.go`
+- **P2Lab change**: When all tools in a batch are `auto_run`, both stages are skipped automatically — no "Share / Keep private" prompt. This is controlled by the `auto_approved_tool_call` post prop.
+- Pre-executed tools (from MCP auto-approval wrapper) go through `handleAutoApprovedToolCalls` in `streaming/streaming.go`
+- Non-pre-executed auto-approved tools go through the standard channel path with `autoExecuteCallback`
+- Both paths converge on `HandleToolCall` in `conversations/tool_handling.go`, which checks `isAutoApproved` to skip the result-sharing block
+
 ## E2E CI Shard Maintenance
 - The agent/plugin e2e CI sharding is defined in `e2e/scripts/ci-test-groups.mjs`.
 - When adding a new e2e spec file that should run on CI, update the appropriate group in that file in the same change.

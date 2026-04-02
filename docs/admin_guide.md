@@ -386,7 +386,7 @@ Currently integrations are limited to direct messages between users and the agen
 - **Access**: Works with both public and private repositories (based on user permissions)
 - **Data Retrieved**: Issue/PR title, number, state, submitter, body content
 
-**Security Note**: All tool integrations are restricted to direct messages to maintain security boundaries and require explicit user approval before execution.
+**Security Note**: Built-in tool integrations (GitHub, Jira, user lookup) are available in direct messages. MCP tools can also be used in channels when channel tool calling is enabled. Per-tool approval policies control whether tools require explicit user approval before execution — see [Tool Approval Policies](#tool-approval-policies) for details.
 
 ## Model Context Protocol (MCP) Integration
 
@@ -497,6 +497,35 @@ To set up an embedded MCP server providing Mattermost AI agents with direct acce
 3. When enabled, all configured agents can access Mattermost tools.
 
 Agents will automatically use these tools when appropriate to complete user requests.
+
+### Tool Approval Policies
+
+Each MCP tool (both from the embedded server and external MCP servers) can be configured with an individual approval policy. Navigate to the **Tools** tab within the MCP configuration to see all discovered tools.
+
+#### Per-Tool Policy
+
+Each tool has two settings:
+
+| Setting | Options | Description |
+|---------|---------|-------------|
+| **Policy** | `Auto Run` / `Ask Every Time` | Controls whether the tool runs automatically or requires user approval before execution |
+| **Enabled** | Toggle | Controls whether the tool is available to agents at all |
+
+- **Auto Run**: The tool executes automatically when the agent decides to use it. No user interaction is required.
+- **Ask Every Time** (default): The user sees an "Accept / Reject" prompt before the tool is allowed to execute.
+
+#### Approval Stages in Channels
+
+When an agent uses tools in a channel (as opposed to a direct message), there are two approval stages:
+
+1. **Call Approval** — whether the tool is allowed to execute. Controlled by the policy above.
+2. **Result Sharing** — whether the tool's results are shared visibly in the channel.
+
+For tools configured as **Auto Run**, both stages are handled automatically: the tool runs without asking, and the results are shared directly in the channel without a "Share / Keep private" prompt. This is the expected behavior for trusted, closed instances where all members have access to the same information.
+
+For tools configured as **Ask Every Time**, the user must approve the tool call first, and then approve sharing the results in the channel.
+
+In **direct messages**, there is no result-sharing stage — tool results are always included directly in the conversation.
 
 #### For External Clients
 
