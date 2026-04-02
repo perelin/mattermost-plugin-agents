@@ -331,8 +331,9 @@ func (p *MMPostStreamService) FinishStreaming(postID string) {
 }
 
 // handleAutoApprovedToolCalls handles tool calls that were pre-executed by the
-// MCP auto-approval wrapper. It skips the call-approval UI and sets up the
-// result-sharing stage directly, since the tools have already been executed.
+// MCP auto-approval wrapper. It skips both the call-approval UI and the
+// result-sharing stage, writing unredacted results directly to the post and
+// invoking the auto-execute callback to continue the conversation.
 func (p *MMPostStreamService) handleAutoApprovedToolCalls(post *model.Post, toolCalls []llm.ToolCall, broadcast *model.WebsocketBroadcast) {
 	requesterID, ok := post.GetProp(LLMRequesterUserID).(string)
 	if !ok || requesterID == "" {
@@ -347,48 +348,57 @@ func (p *MMPostStreamService) handleAutoApprovedToolCalls(post *model.Post, tool
 		}
 	}
 
-	// Store full results in the result KV key (consumed by HandleToolResult)
-	resultKVKey := ToolResultPrivateKVKey(post.Id, requesterID)
-	if kvErr := p.mmClient.KVSet(resultKVKey, toolCalls); kvErr != nil {
-		p.mmClient.LogError("Failed to store auto-approved tool results", "error", kvErr, "post_id", post.Id)
-		return
-	}
-
-	// Store full tool calls in the call KV key (for cleanup in HandleToolResult)
+	// Store full tool calls in the call KV key (for the auto-execute callback)
 	callKVKey := ToolCallPrivateKVKey(post.Id, requesterID)
 	if kvErr := p.mmClient.KVSet(callKVKey, toolCalls); kvErr != nil {
 		p.mmClient.LogError("Failed to store auto-approved tool call data", "error", kvErr, "post_id", post.Id)
 		return
 	}
 
-	// Redact for post display
-	redactedTools := RedactToolCalls(toolCalls)
-	toolCallJSON, err := json.Marshal(redactedTools)
+	// Write unredacted results directly to the post — no result-sharing stage
+	toolCallJSON, err := json.Marshal(toolCalls)
 	if err != nil {
 		p.mmClient.LogError("Failed to marshal auto-approved tool call", "error", err)
 		return
 	}
 
-	// Set up result-sharing stage: the post shows redacted tools with
-	// PendingToolResultProp so the frontend presents the result-approval UI
-	// instead of the call-approval UI.
 	post.AddProp(ToolCallProp, string(toolCallJSON))
-	post.AddProp(ToolCallRedactedProp, "true")
-	post.AddProp(PendingToolResultProp, "true")
 	post.AddProp(AutoApprovedToolCallProp, "true")
+	// Do NOT set PendingToolResultProp — this skips the Share/Keep private UI
+	post.DelProp(PendingToolResultProp)
+	post.DelProp(ToolCallRedactedProp)
 
 	if err := p.mmClient.UpdatePost(post); err != nil {
 		p.mmClient.LogError("Failed to update post with auto-approved tool call", "error", err)
 	}
 
-	// Send websocket event for the result-sharing UI
+	// Send websocket event to update the UI with resolved tool calls
 	p.mmClient.PublishWebSocketEvent("postupdate", map[string]interface{}{
 		"post_id":   post.Id,
 		"control":   "tool_call",
 		"tool_call": string(toolCallJSON),
 	}, broadcast)
 
-	p.mmClient.LogDebug("Auto-approved MCP tool calls executed", "post_id", post.Id, "tool_count", len(toolCalls))
+	p.mmClient.LogDebug("Auto-approved MCP tool calls executed, continuing directly", "post_id", post.Id, "tool_count", len(toolCalls))
+
+	// Continue the conversation directly via the auto-execute callback,
+	// bypassing the result-sharing approval stage. Only invoke the callback
+	// when at least one tool succeeded — error-only batches should not
+	// re-enter the tool loop (they would just produce another error).
+	hasSuccessful := false
+	for _, tc := range toolCalls {
+		if tc.Status == llm.ToolCallStatusSuccess {
+			hasSuccessful = true
+			break
+		}
+	}
+	if hasSuccessful && p.autoExecuteCallback != nil {
+		approvedIDs := make([]string, len(toolCalls))
+		for i := range toolCalls {
+			approvedIDs[i] = toolCalls[i].ID
+		}
+		go p.autoExecuteCallback(post.Id, requesterID, approvedIDs)
+	}
 }
 
 // StreamToPost streams the result of a TextStreamResult to a post.

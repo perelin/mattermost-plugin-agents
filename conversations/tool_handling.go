@@ -217,7 +217,12 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		}
 	}
 
-	if !isDM {
+	// When all tools were auto-approved, skip the result-sharing stage and
+	// continue directly (like DMs do). This avoids the "Share / Keep private"
+	// prompt for tools that were already deemed safe to run automatically.
+	isAutoApproved := post.GetProp(streaming.AutoApprovedToolCallProp) == "true"
+
+	if !isDM && !isAutoApproved {
 		hasReviewableResult := slices.ContainsFunc(tools, func(tc llm.ToolCall) bool {
 			return tc.Status == llm.ToolCallStatusSuccess || tc.Status == llm.ToolCallStatusError
 		})
@@ -271,6 +276,13 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		// in HandleToolResult after the flow completes.
 
 		return nil
+	}
+
+	// Auto-approved channel tools: clean up KV entries since we skip result-sharing
+	if !isDM && isAutoApproved && toolCallKVKey != "" {
+		if deleteErr := c.mmClient.KVDelete(toolCallKVKey); deleteErr != nil {
+			c.mmClient.LogError("Failed to delete tool call KV entry", "error", deleteErr, "post_id", post.Id, "kv_key", toolCallKVKey)
+		}
 	}
 
 	// Update post with the tool call results
@@ -462,6 +474,10 @@ func (c *Conversations) completeAndStreamToolResponse(
 	toolsDisabled bool,
 	allowToolsInChannel bool,
 ) error {
+	if c.prompts == nil || c.streamingService == nil {
+		return errors.New("conversation service not fully initialized")
+	}
+
 	responseRootID := responseRootIDFromPost(toolCallPost)
 
 	previousConversation, err := mmapi.GetThreadData(c.mmClient, responseRootID)

@@ -321,8 +321,10 @@ func TestStreamToPostAutoApproval(t *testing.T) {
 			// Verify post was updated
 			require.GreaterOrEqual(t, len(client.updatedPosts), 1)
 
-			// Verify tool calls are redacted for channel, unredacted for DM
-			if !tc.isDM {
+			// Verify tool calls are redacted for standard channel flow, unredacted for DM
+			// and for pre-executed auto-approved channel tools.
+			isPreExecuted := llm.HasPreExecutedToolCalls(tc.toolCalls)
+			if !tc.isDM && !isPreExecuted {
 				require.Equal(t, "true", post.GetProp(ToolCallRedactedProp))
 				toolCallProp, ok := post.GetProp(ToolCallProp).(string)
 				require.True(t, ok)

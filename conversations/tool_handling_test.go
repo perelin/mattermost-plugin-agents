@@ -860,25 +860,25 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 		// Call AutoExecuteApprovedToolCalls with pre-approved tool IDs
 		conversationService.AutoExecuteApprovedToolCalls(postID, requesterID, []string{"tool-1"})
 
-		// Verify results stored in KV
-		resultKVKey := streaming.ToolResultPrivateKVKey(postID, requesterID)
-		storedResults, ok := fakeClient.kv[resultKVKey]
-		require.True(t, ok, "tool results should be stored in KV")
-		resultCalls, ok := storedResults.([]llm.ToolCall)
-		require.True(t, ok)
-		require.Len(t, resultCalls, 1)
-		require.Equal(t, "result:auto-data", resultCalls[0].Result)
-		require.Equal(t, llm.ToolCallStatusSuccess, resultCalls[0].Status)
-
-		// Verify post updated with pending_tool_result
+		// Auto-approved tools skip the result-sharing stage (no KV result storage,
+		// no PendingToolResultProp). The post is updated with unredacted tool
+		// results and the flow attempts to continue to completeAndStreamToolResponse
+		// (which will error in this test due to missing prompts/streaming infra).
 		require.NotEmpty(t, fakeClient.updatedPosts)
 		lastUpdated := fakeClient.updatedPosts[len(fakeClient.updatedPosts)-1]
-		require.Equal(t, "true", lastUpdated.GetProp(streaming.PendingToolResultProp))
 
-		// Verify tool calls on post are still redacted
+		// PendingToolResultProp should NOT be set — result-sharing stage is skipped
+		require.Nil(t, lastUpdated.GetProp(streaming.PendingToolResultProp))
+
+		// Tool results should be unredacted on the post (not stored in KV)
 		toolCallProp, ok := lastUpdated.GetProp(streaming.ToolCallProp).(string)
 		require.True(t, ok)
-		require.NotContains(t, toolCallProp, "auto-data")
+		require.Contains(t, toolCallProp, "result:auto-data")
+
+		// Tool call KV entry should be cleaned up
+		toolCallKVKey2 := streaming.ToolCallPrivateKVKey(postID, requesterID)
+		_, kvFound := fakeClient.kv[toolCallKVKey2]
+		require.False(t, kvFound, "tool call KV entry should be deleted for auto-approved tools")
 	})
 
 	t.Run("tool execution error - result still stored", func(t *testing.T) {
@@ -958,15 +958,22 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 
 		conversationService.AutoExecuteApprovedToolCalls(postID, requesterID, []string{"tool-1"})
 
-		// Tool had an error, but results should still be stored
-		resultKVKey := streaming.ToolResultPrivateKVKey(postID, requesterID)
-		storedResults, ok := fakeClient.kv[resultKVKey]
-		require.True(t, ok, "tool results should be stored even on error")
-		resultCalls, ok := storedResults.([]llm.ToolCall)
+		// Auto-approved tools skip result-sharing stage. Error results are
+		// written directly to the post (unredacted), not stored in KV.
+		require.NotEmpty(t, fakeClient.updatedPosts)
+		lastUpdated := fakeClient.updatedPosts[len(fakeClient.updatedPosts)-1]
+
+		// Verify error result is on the post
+		toolCallProp, ok := lastUpdated.GetProp(streaming.ToolCallProp).(string)
 		require.True(t, ok)
-		require.Len(t, resultCalls, 1)
-		require.Equal(t, llm.ToolCallStatusError, resultCalls[0].Status)
-		require.Equal(t, "tool execution failed", resultCalls[0].Result)
+		var resolvedCalls []llm.ToolCall
+		require.NoError(t, json.Unmarshal([]byte(toolCallProp), &resolvedCalls))
+		require.Len(t, resolvedCalls, 1)
+		require.Equal(t, llm.ToolCallStatusError, resolvedCalls[0].Status)
+		require.Equal(t, "tool execution failed", resolvedCalls[0].Result)
+
+		// PendingToolResultProp should NOT be set
+		require.Nil(t, lastUpdated.GetProp(streaming.PendingToolResultProp))
 	})
 
 	t.Run("missing post - logs error and returns", func(t *testing.T) {
