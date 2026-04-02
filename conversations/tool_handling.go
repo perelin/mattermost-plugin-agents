@@ -259,11 +259,10 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 		post.AddProp(streaming.ToolCallRedactedProp, "true")
 		post.AddProp(streaming.PendingToolResultProp, "true")
-		userLocale := "en"
-		if user, appErr := c.mmClient.GetUser(requesterID); appErr != nil {
-			c.mmClient.LogError("Failed to get user locale for tool approval", "error", appErr, "user_id", requesterID)
-		} else {
-			userLocale = user.Locale
+		// Reuse the user already loaded at the top of HandleToolCall (requesterID == userID, validated above).
+		userLocale := user.Locale
+		if userLocale == "" {
+			userLocale = "en"
 		}
 		T := plugini18n.LocalizerFunc(c.i18n, userLocale)
 		streaming.ClearApprovalAttachments(post)

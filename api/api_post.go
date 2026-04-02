@@ -483,7 +483,17 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 	}
 
 	if !a.licenseChecker.IsBasicsLicensed() {
-		respond("feature not licensed")
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+
+	isDM := mmapi.IsDMWith(post.UserId, channel)
+	if !isDM && !a.config.EnableChannelMentionToolCalling() {
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
+		return
+	}
+	if !isDM && post.GetProp(streaming.AllowToolsInChannelProp) != "true" {
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		return
 	}
 
@@ -526,7 +536,7 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 		case "only the original requester can approve/reject tool calls", "only the original requester can approve/reject tool results":
 			respond(T("agents.tool_approval.not_authorized", "Only the person who triggered this can approve."))
 		default:
-			respond(actionErr.Error())
+			respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		}
 		return
 	}
