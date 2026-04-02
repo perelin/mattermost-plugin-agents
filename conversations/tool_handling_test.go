@@ -279,6 +279,7 @@ func TestHandleToolCallChannelStoresInKVAndRedactsProps(t *testing.T) {
 		channelID   = "channel-id"
 		teamID      = "team-id"
 		botID       = "bot-id"
+		pluginID    = "plugin-id"
 		requesterID = "requester-id"
 	)
 
@@ -350,6 +351,7 @@ func TestHandleToolCallChannelStoresInKVAndRedactsProps(t *testing.T) {
 
 	toolCallingConfig := &testToolCallingConfig{enableChannelMentionToolCalling: true}
 	conversationService := conversations.New(nil, fakeClient, nil, contextBuilder, botService, nil, licenseChecker, i18n.Init(), nil, toolCallingConfig)
+	conversationService.SetPluginID(pluginID)
 
 	channel := &model.Channel{
 		Id:     channelID,
@@ -385,6 +387,94 @@ func TestHandleToolCallChannelStoresInKVAndRedactsProps(t *testing.T) {
 	require.Equal(t, "true", post.GetProp(streaming.ToolCallRedactedProp))
 	require.Equal(t, "true", post.GetProp(streaming.PendingToolResultProp))
 	require.Len(t, fakeClient.updatedPosts, 1)
+	attachments, ok := fakeClient.updatedPosts[0].GetProp(model.PostPropsAttachments).([]*model.SlackAttachment)
+	require.True(t, ok)
+	require.Len(t, attachments, 1)
+	require.Len(t, attachments[0].Actions, 2)
+	require.Equal(t, "/plugins/"+pluginID+"/actions/tool_approval", attachments[0].Actions[0].Integration.URL)
+}
+
+func TestHandleToolCallClearsApprovalAttachmentsWhenAllResultsRejected(t *testing.T) {
+	const (
+		postID      = "post-id"
+		channelID   = "channel-id"
+		teamID      = "team-id"
+		botID       = "bot-id"
+		requesterID = "requester-id"
+	)
+
+	mockAPI := &plugintest.API{}
+	client := pluginapi.NewClient(mockAPI, nil)
+	licenseChecker := enterprise.NewLicenseChecker(client)
+
+	siteName := "Mattermost"
+	mockAPI.On("GetConfig").Return(&model.Config{TeamSettings: model.TeamSettings{SiteName: &siteName}}).Maybe()
+	mockAPI.On("GetLicense").Return(&model.License{SkuShortName: "advanced"}).Maybe()
+	mockAPI.On("GetTeam", teamID).Return(&model.Team{Id: teamID}, nil).Maybe()
+
+	tool := llm.Tool{
+		Name:        "test_tool",
+		Description: "test tool",
+		Schema:      llm.NewJSONSchemaFromStruct[toolArgs](),
+		Resolver: func(_ *llm.Context, args llm.ToolArgumentGetter) (string, error) {
+			var parsed toolArgs
+			if err := args(&parsed); err != nil {
+				return "", err
+			}
+			return "ok:" + parsed.Value, nil
+		},
+	}
+	contextBuilder := llmcontext.NewLLMContextBuilder(client, &testToolProvider{tools: []llm.Tool{tool}}, nil, &testConfigProvider{})
+
+	botService := bots.New("p2lab-agents", mockAPI, client, licenseChecker, nil, &http.Client{}, nil)
+	bot := bots.NewBot(llm.BotConfig{ID: botID, Name: "test-bot"}, llm.ServiceConfig{}, &model.Bot{UserId: botID, Username: "test-bot"}, nil)
+	botService.SetBotsForTesting([]*bots.Bot{bot})
+
+	post := &model.Post{
+		Id:        postID,
+		UserId:    botID,
+		ChannelId: channelID,
+		CreateAt:  1,
+	}
+	post.AddProp(streaming.LLMRequesterUserID, requesterID)
+	post.AddProp(streaming.AllowToolsInChannelProp, "true")
+	post.AddProp(model.PostPropsAttachments, []*model.SlackAttachment{{Text: "pending approval"}})
+
+	toolCalls := []llm.ToolCall{{
+		ID:        "tool-1",
+		Name:      "test_tool",
+		Arguments: json.RawMessage(`{"value":"secret"}`),
+	}}
+	redactedToolCalls := streaming.RedactToolCalls(toolCalls)
+	redactedJSON, err := json.Marshal(redactedToolCalls)
+	require.NoError(t, err)
+	post.AddProp(streaming.ToolCallProp, string(redactedJSON))
+
+	postList := &model.PostList{
+		Order: []string{postID},
+		Posts: map[string]*model.Post{postID: post},
+	}
+
+	fakeClient := &fakeMMClient{
+		users: map[string]*model.User{
+			requesterID: {Id: requesterID, Locale: "en"},
+			botID:       {Id: botID, Locale: "en"},
+		},
+		postThreads: map[string]*model.PostList{postID: postList},
+		kv:          map[string]interface{}{},
+	}
+	toolCallKVKey := streaming.ToolCallPrivateKVKey(postID, requesterID)
+	fakeClient.kv[toolCallKVKey] = toolCalls
+
+	toolCallingConfig := &testToolCallingConfig{enableChannelMentionToolCalling: true}
+	conversationService := conversations.New(nil, fakeClient, nil, contextBuilder, botService, nil, licenseChecker, i18n.Init(), nil, toolCallingConfig)
+
+	channel := &model.Channel{Id: channelID, Type: model.ChannelTypeOpen, TeamId: teamID}
+
+	err = conversationService.HandleToolCall(requesterID, post, channel, nil)
+	require.NoError(t, err)
+	require.Len(t, fakeClient.updatedPosts, 1)
+	require.Nil(t, fakeClient.updatedPosts[0].GetProp(model.PostPropsAttachments))
 }
 
 func TestHandleToolCallPreservesResolvedToolCallsWhenApprovingPendingSubset(t *testing.T) {
@@ -813,6 +903,7 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 		post.AddProp(streaming.LLMRequesterUserID, requesterID)
 		post.AddProp(streaming.AllowToolsInChannelProp, "true")
 		post.AddProp(streaming.AutoApprovedToolCallProp, "true")
+		post.AddProp(model.PostPropsAttachments, []*model.SlackAttachment{{Text: "pending approval"}})
 
 		toolCalls := []llm.ToolCall{
 			{
@@ -869,6 +960,7 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 
 		// PendingToolResultProp should NOT be set — result-sharing stage is skipped
 		require.Nil(t, lastUpdated.GetProp(streaming.PendingToolResultProp))
+		require.Nil(t, lastUpdated.GetProp(model.PostPropsAttachments))
 
 		// Tool results should be unredacted on the post (not stored in KV)
 		toolCallProp, ok := lastUpdated.GetProp(streaming.ToolCallProp).(string)
@@ -914,6 +1006,7 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 		post.AddProp(streaming.LLMRequesterUserID, requesterID)
 		post.AddProp(streaming.AllowToolsInChannelProp, "true")
 		post.AddProp(streaming.AutoApprovedToolCallProp, "true")
+		post.AddProp(model.PostPropsAttachments, []*model.SlackAttachment{{Text: "pending approval"}})
 
 		toolCalls := []llm.ToolCall{
 			{
@@ -974,6 +1067,7 @@ func TestAutoExecuteApprovedToolCalls(t *testing.T) {
 
 		// PendingToolResultProp should NOT be set
 		require.Nil(t, lastUpdated.GetProp(streaming.PendingToolResultProp))
+		require.Nil(t, lastUpdated.GetProp(model.PostPropsAttachments))
 	})
 
 	t.Run("missing post - logs error and returns", func(t *testing.T) {
@@ -1080,6 +1174,7 @@ func TestHandleToolResultDoesNotContinueWhenNoToolCallSucceeded(t *testing.T) {
 	post.AddProp(streaming.LLMRequesterUserID, requesterID)
 	post.AddProp(streaming.AllowToolsInChannelProp, "true")
 	post.AddProp(streaming.PendingToolResultProp, "true")
+	post.AddProp(model.PostPropsAttachments, []*model.SlackAttachment{{Text: "pending review"}})
 
 	// Tools with all errors - no successful tool call
 	toolsWithErrors := []llm.ToolCall{
@@ -1134,6 +1229,7 @@ func TestHandleToolResultDoesNotContinueWhenNoToolCallSucceeded(t *testing.T) {
 	require.Len(t, fakeClient.updatedPosts, 1)
 	updatedPost := fakeClient.updatedPosts[0]
 	require.Nil(t, updatedPost.GetProp(streaming.PendingToolResultProp))
+	require.Nil(t, updatedPost.GetProp(model.PostPropsAttachments))
 
 	// KV entries were cleaned up (no continuation = no need to keep them)
 	require.Contains(t, fakeClient.kvDeletes, resultKVKey)

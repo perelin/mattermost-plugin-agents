@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/mattermost/mattermost-plugin-ai/bots"
+	plugini18n "github.com/mattermost/mattermost-plugin-ai/i18n"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
 	"github.com/mattermost/mattermost-plugin-ai/mmapi"
 	"github.com/mattermost/mattermost-plugin-ai/mmtools"
@@ -235,6 +236,7 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 			post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 			post.AddProp(streaming.ToolCallRedactedProp, "true")
 			post.DelProp(streaming.PendingToolResultProp)
+			streaming.ClearApprovalAttachments(post)
 			if updateErr := c.mmClient.UpdatePost(post); updateErr != nil {
 				return fmt.Errorf("failed to update post with tool call results: %w", updateErr)
 			}
@@ -257,6 +259,17 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 		post.AddProp(streaming.ToolCallRedactedProp, "true")
 		post.AddProp(streaming.PendingToolResultProp, "true")
+		userLocale := "en"
+		if user, appErr := c.mmClient.GetUser(requesterID); appErr != nil {
+			c.mmClient.LogError("Failed to get user locale for tool approval", "error", appErr, "user_id", requesterID)
+		} else {
+			userLocale = user.Locale
+		}
+		T := plugini18n.LocalizerFunc(c.i18n, userLocale)
+		streaming.ClearApprovalAttachments(post)
+		if attachments := streaming.ToolResultApprovalAttachments(c.pluginID, tools, T); attachments != nil {
+			post.AddProp(model.PostPropsAttachments, attachments)
+		}
 		// Persist web search context so HandleToolResult and subsequent messages can find it
 		if params := llmContext.Parameters; len(params) > 0 {
 			if _, hasWebSearch := params[mmtools.WebSearchContextKey]; hasWebSearch {
@@ -291,6 +304,7 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		return fmt.Errorf("failed to marshal tool call results: %w", err)
 	}
 	post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
+	streaming.ClearApprovalAttachments(post)
 
 	// Persist web search context if it exists (so it's available for subsequent tool calls)
 	if webSearchParams := llmContext.Parameters; len(webSearchParams) > 0 {
@@ -380,6 +394,7 @@ func (c *Conversations) HandleToolResult(userID string, post *model.Post, channe
 		post.AddProp(streaming.ToolCallProp, string(redactedToolsJSON))
 		post.AddProp(streaming.ToolCallRedactedProp, "true")
 		post.DelProp(streaming.PendingToolResultProp)
+		streaming.ClearApprovalAttachments(post)
 		if updateErr := c.mmClient.UpdatePost(post); updateErr != nil {
 			return fmt.Errorf("failed to update post after tool result rejection: %w", updateErr)
 		}
@@ -430,6 +445,7 @@ func (c *Conversations) HandleToolResult(userID string, post *model.Post, channe
 	post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 	post.DelProp(streaming.ToolCallRedactedProp)
 	post.DelProp(streaming.PendingToolResultProp)
+	streaming.ClearApprovalAttachments(post)
 	// Persist web search context so subsequent messages in the thread preserve citations
 	if params := llmContext.Parameters; len(params) > 0 {
 		if _, hasWebSearch := params[mmtools.WebSearchContextKey]; hasWebSearch {
