@@ -432,6 +432,27 @@ func isImageMimeType(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
 }
 
+func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) string {
+	limitMB := fmt.Sprintf("%.0f MB", float64(skipped[0].Limit)/(1024*1024))
+	if len(skipped) == 1 {
+		sizeMB := fmt.Sprintf("%.1f MB", float64(skipped[0].Size)/(1024*1024))
+		return T(
+			"agents.skipped_image_single",
+			"Note: The image \"%s\" (%s) was not sent to the AI — it exceeds the %s size limit.",
+			skipped[0].Name, sizeMB, limitMB,
+		)
+	}
+	names := make([]string, len(skipped))
+	for i, f := range skipped {
+		names[i] = fmt.Sprintf("%s (%.1f MB)", f.Name, float64(f.Size)/(1024*1024))
+	}
+	return T(
+		"agents.skipped_images_multiple",
+		"Note: %d images were not sent to the AI — they exceed the %s size limit: %s",
+		len(skipped), limitMB, strings.Join(names, ", "),
+	)
+}
+
 func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 	var filesForUpstream []llm.File
 	message := format.PostBody(post)

@@ -1,0 +1,48 @@
+// Copyright (c) 2023-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
+package conversations
+
+import (
+	"testing"
+
+	"github.com/mattermost/mattermost-plugin-ai/i18n"
+	"github.com/mattermost/mattermost-plugin-ai/llm"
+	"github.com/stretchr/testify/require"
+)
+
+func TestBuildSkippedImagesNote(t *testing.T) {
+	bundle := i18n.Init()
+	T := i18n.LocalizerFunc(bundle, "en")
+
+	tests := []struct {
+		name     string
+		skipped  []llm.SkippedFile
+		contains []string
+	}{
+		{
+			name: "single skipped image",
+			skipped: []llm.SkippedFile{
+				{Name: "photo.jpg", Size: 8 * 1024 * 1024, Limit: 5 * 1024 * 1024},
+			},
+			contains: []string{"photo.jpg", "8.0 MB", "5 MB"},
+		},
+		{
+			name: "multiple skipped images",
+			skipped: []llm.SkippedFile{
+				{Name: "a.jpg", Size: 6 * 1024 * 1024, Limit: 5 * 1024 * 1024},
+				{Name: "b.png", Size: 9 * 1024 * 1024, Limit: 5 * 1024 * 1024},
+			},
+			contains: []string{"2", "a.jpg", "b.png", "5 MB"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			note := buildSkippedImagesNote(T, tc.skipped)
+			for _, substr := range tc.contains {
+				require.Contains(t, note, substr)
+			}
+		})
+	}
+}
