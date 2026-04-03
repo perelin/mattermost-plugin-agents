@@ -465,7 +465,16 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 		c.JSON(http.StatusOK, &model.PostActionIntegrationResponse{EphemeralText: text})
 	}
 
-	post, err := a.pluginAPI.Post.GetPost(req.PostId)
+	// Resolve bot post ID: new style uses a separate approval post with original_post_id in context;
+	// legacy style has the attachment on the bot post itself.
+	var approvalPostID string
+	postIDToProcess := req.PostId
+	if origID, ok := req.Context["original_post_id"].(string); ok && origID != "" {
+		postIDToProcess = origID
+		approvalPostID = req.PostId
+	}
+
+	post, err := a.pluginAPI.Post.GetPost(postIDToProcess)
 	if err != nil || post == nil {
 		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		return
@@ -508,6 +517,11 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 		a.pluginAPI.Log.Error("Failed to update post after clearing approval attachments", "error", err)
 		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		return
+	}
+	if approvalPostID != "" {
+		if err := a.pluginAPI.Post.DeletePost(approvalPostID); err != nil {
+			a.pluginAPI.Log.Error("Failed to delete approval post", "error", err, "approval_post_id", approvalPostID)
+		}
 	}
 
 	var actionErr error

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -32,6 +33,7 @@ type fakeMMClient struct {
 	postThreads  map[string]*model.PostList
 	kv           map[string]interface{}
 	updatedPosts []*model.Post
+	createdPosts []*model.Post
 	kvDeletes    []string
 	posts        map[string]*model.Post
 	channels     map[string]*model.Channel
@@ -54,7 +56,13 @@ func (c *fakeMMClient) GetPostThread(postID string) (*model.PostList, error) {
 }
 
 func (c *fakeMMClient) CreatePost(post *model.Post) error {
-	return errors.New("not implemented")
+	clone := post.Clone()
+	if clone.Id == "" {
+		clone.Id = fmt.Sprintf("created-post-%d", len(c.createdPosts)+1)
+	}
+	post.Id = clone.Id
+	c.createdPosts = append(c.createdPosts, clone)
+	return nil
 }
 
 func (c *fakeMMClient) UpdatePost(post *model.Post) error {
@@ -184,6 +192,8 @@ func (c *fakeMMClient) GetFile(string) (io.ReadCloser, error) {
 }
 
 func (c *fakeMMClient) SendEphemeralPost(string, *model.Post) {}
+
+func (c *fakeMMClient) DeletePost(string) error { return nil }
 
 type capturingLanguageModel struct {
 	autoRunTools []string
@@ -387,11 +397,16 @@ func TestHandleToolCallChannelStoresInKVAndRedactsProps(t *testing.T) {
 	require.Equal(t, "true", post.GetProp(streaming.ToolCallRedactedProp))
 	require.Equal(t, "true", post.GetProp(streaming.PendingToolResultProp))
 	require.Len(t, fakeClient.updatedPosts, 1)
-	attachments, ok := fakeClient.updatedPosts[0].GetProp(model.PostPropsAttachments).([]*model.SlackAttachment)
+	// Attachments are now on a separate approval post, not on the bot post itself.
+	require.Nil(t, fakeClient.updatedPosts[0].GetProp(model.PostPropsAttachments))
+	require.Len(t, fakeClient.createdPosts, 1)
+	attachments, ok := fakeClient.createdPosts[0].GetProp(model.PostPropsAttachments).([]*model.SlackAttachment)
 	require.True(t, ok)
 	require.Len(t, attachments, 1)
 	require.Len(t, attachments[0].Actions, 2)
 	require.Equal(t, "/plugins/"+pluginID+"/actions/tool_approval", attachments[0].Actions[0].Integration.URL)
+	// Bot post should reference the approval post ID.
+	require.Equal(t, fakeClient.createdPosts[0].Id, post.GetProp(streaming.ToolApprovalPostIDProp))
 }
 
 func TestHandleToolCallClearsApprovalAttachmentsWhenAllResultsRejected(t *testing.T) {

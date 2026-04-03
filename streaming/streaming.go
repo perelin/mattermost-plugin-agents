@@ -621,8 +621,24 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 
 						if !autoApproved {
 							T := i18n.LocalizerFunc(p.i18n, userLocale)
-							if attachments := ToolCallApprovalAttachments(p.pluginID, toolCalls, T); attachments != nil {
-								post.AddProp(model.PostPropsAttachments, attachments)
+							if attachments := ToolCallApprovalAttachments(p.pluginID, post.Id, toolCalls, T); attachments != nil {
+								approvalRootID := post.RootId
+								if approvalRootID == "" {
+									approvalRootID = post.Id
+								}
+								approvalPost := &model.Post{
+									UserId:    post.UserId,
+									ChannelId: post.ChannelId,
+									RootId:    approvalRootID,
+								}
+								approvalPost.AddProp(LLMRequesterUserID, requesterID)
+								approvalPost.AddProp(AllowToolsInChannelProp, "true")
+								approvalPost.AddProp(model.PostPropsAttachments, attachments)
+								if createErr := p.mmClient.CreatePost(approvalPost); createErr != nil {
+									p.mmClient.LogError("Failed to create tool approval post", "error", createErr, "post_id", post.Id)
+								} else {
+									post.AddProp(ToolApprovalPostIDProp, approvalPost.Id)
+								}
 							}
 						}
 

@@ -21,6 +21,7 @@ type Client interface {
 	GetPostsBefore(channelID, postID string, page, perPage int) (*model.PostList, error)
 	CreatePost(post *model.Post) error
 	UpdatePost(post *model.Post) error
+	DeletePost(postID string) error
 	DM(senderID, receiverID string, post *model.Post) error
 	GetTeam(teamID string) (*model.Team, error)
 	GetChannel(channelID string) (*model.Channel, error)
@@ -154,4 +155,8 @@ func (m *client) GetFile(fileID string) (io.ReadCloser, error) {
 
 func (m *client) SendEphemeralPost(userID string, post *model.Post) {
 	m.PostService.SendEphemeralPost(userID, post)
+}
+
+func (m *client) DeletePost(postID string) error {
+	return m.pluginAPI.Post.DeletePost(postID)
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -225,6 +226,8 @@ func (c *approvalFakeMMClient) GetFile(string) (io.ReadCloser, error) {
 
 func (c *approvalFakeMMClient) SendEphemeralPost(string, *model.Post) {}
 
+func (c *approvalFakeMMClient) DeletePost(string) error { return nil }
+
 func setupToolApprovalTestEnvironment(t *testing.T) (*TestEnvironment, *approvalFakeMMClient) {
 	t.Helper()
 
@@ -292,9 +295,6 @@ func newToolApprovalPost(toolProp string) *model.Post {
 		Props: model.StringInterface{
 			streaming.LLMRequesterUserID:      testUserID,
 			streaming.AllowToolsInChannelProp: "true",
-			model.PostPropsAttachments: []*model.SlackAttachment{{
-				Text: "pending approval",
-			}},
 		},
 	}
 	if toolProp != "" {
@@ -306,10 +306,16 @@ func newToolApprovalPost(toolProp string) *model.Post {
 func makeToolApprovalRequest(t *testing.T, userID string, context map[string]any) *http.Request {
 	t.Helper()
 
+	// Simulate the new architecture: the button is on a separate approval post
+	// (approval-postid) which routes back to the original bot post via original_post_id.
+	merged := make(map[string]any, len(context)+1)
+	maps.Copy(merged, context)
+	merged["original_post_id"] = "postid"
+
 	body, err := json.Marshal(model.PostActionIntegrationRequest{
 		UserId:  userID,
-		PostId:  "postid",
-		Context: context,
+		PostId:  "approval-postid",
+		Context: merged,
 	})
 	require.NoError(t, err)
 
@@ -588,6 +594,7 @@ func TestHandleToolApprovalAction(t *testing.T) {
 			}
 			e.mockAPI.On("GetUser", tt.requestUserID).Return(&model.User{Id: tt.requestUserID, Locale: "en"}, nil).Maybe()
 			e.mockAPI.On("LogError", mock.Anything).Maybe()
+			e.mockAPI.On("DeletePost", "approval-postid").Return(nil).Maybe()
 
 			if tt.configureEnvironment != nil {
 				tt.configureEnvironment(e, mmClient, tt.post)

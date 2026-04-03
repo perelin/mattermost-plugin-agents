@@ -16,7 +16,7 @@ import (
 func TestToolApprovalAttachments(t *testing.T) {
 	tests := []struct {
 		name            string
-		build           func(string, []llm.ToolCall, plugini18n.TranslationFunc) []*model.SlackAttachment
+		build           func(string, string, []llm.ToolCall, plugini18n.TranslationFunc) []*model.SlackAttachment
 		expectedStage   string
 		expectedTextKey string
 		expectedActions []struct {
@@ -80,7 +80,7 @@ func TestToolApprovalAttachments(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			attachments := testCase.build("plugin-id", toolCalls, translationFunc)
+			attachments := testCase.build("plugin-id", "post-id", toolCalls, translationFunc)
 
 			require.Len(t, attachments, 1)
 			attachment := attachments[0]
@@ -111,7 +111,7 @@ func TestToolApprovalAttachments(t *testing.T) {
 func TestToolApprovalAttachmentsEmptyToolCalls(t *testing.T) {
 	tests := []struct {
 		name  string
-		build func(string, []llm.ToolCall, plugini18n.TranslationFunc) []*model.SlackAttachment
+		build func(string, string, []llm.ToolCall, plugini18n.TranslationFunc) []*model.SlackAttachment
 	}{
 		{name: "tool call approval returns nil", build: ToolCallApprovalAttachments},
 		{name: "tool result approval returns nil", build: ToolResultApprovalAttachments},
@@ -126,8 +126,8 @@ func TestToolApprovalAttachmentsEmptyToolCalls(t *testing.T) {
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			require.Nil(t, testCase.build("plugin-id", nil, translationFunc))
-			require.Nil(t, testCase.build("plugin-id", []llm.ToolCall{}, translationFunc))
+			require.Nil(t, testCase.build("plugin-id", "", nil, translationFunc))
+			require.Nil(t, testCase.build("plugin-id", "", []llm.ToolCall{}, translationFunc))
 		})
 	}
 }

@@ -14,7 +14,11 @@ import (
 
 const toolApprovalActionURLFormat = "/plugins/%s/actions/tool_approval"
 
-func ToolCallApprovalAttachments(pluginID string, toolCalls []llm.ToolCall, T plugini18n.TranslationFunc) []*model.SlackAttachment {
+// ToolApprovalPostIDProp is the post prop key on the bot post that stores the ID
+// of the separate approval post created for mobile interactive buttons.
+const ToolApprovalPostIDProp = "tool_approval_post_id"
+
+func ToolCallApprovalAttachments(pluginID string, originalPostID string, toolCalls []llm.ToolCall, T plugini18n.TranslationFunc) []*model.SlackAttachment {
 	if len(toolCalls) == 0 {
 		return nil
 	}
@@ -26,6 +30,7 @@ func ToolCallApprovalAttachments(pluginID string, toolCalls []llm.ToolCall, T pl
 
 	return []*model.SlackAttachment{buildToolApprovalAttachment(
 		pluginID,
+		originalPostID,
 		T("agents.tool_approval.call_description", "Agents wants to run: %s", strings.Join(toolNames, ", ")),
 		"call",
 		toolCalls,
@@ -36,13 +41,14 @@ func ToolCallApprovalAttachments(pluginID string, toolCalls []llm.ToolCall, T pl
 	)}
 }
 
-func ToolResultApprovalAttachments(pluginID string, toolCalls []llm.ToolCall, T plugini18n.TranslationFunc) []*model.SlackAttachment {
+func ToolResultApprovalAttachments(pluginID string, originalPostID string, toolCalls []llm.ToolCall, T plugini18n.TranslationFunc) []*model.SlackAttachment {
 	if len(toolCalls) == 0 {
 		return nil
 	}
 
 	return []*model.SlackAttachment{buildToolApprovalAttachment(
 		pluginID,
+		originalPostID,
 		T("agents.tool_approval.result_description", "Tool results are ready for review"),
 		"result",
 		toolCalls,
@@ -53,8 +59,13 @@ func ToolResultApprovalAttachments(pluginID string, toolCalls []llm.ToolCall, T 
 	)}
 }
 
-func ClearApprovalAttachments(post *model.Post) {
+// ClearApprovalAttachments removes interactive attachment props from the post
+// and returns the approval post ID (if any) so the caller can delete it.
+func ClearApprovalAttachments(post *model.Post) string {
 	post.DelProp(model.PostPropsAttachments)
+	approvalPostID, _ := post.GetProp(ToolApprovalPostIDProp).(string)
+	post.DelProp(ToolApprovalPostIDProp)
+	return approvalPostID
 }
 
 type toolApprovalActionDefinition struct {
@@ -63,7 +74,7 @@ type toolApprovalActionDefinition struct {
 	style  string
 }
 
-func buildToolApprovalAttachment(pluginID string, text string, stage string, toolCalls []llm.ToolCall, actionDefinitions []toolApprovalActionDefinition) *model.SlackAttachment {
+func buildToolApprovalAttachment(pluginID string, originalPostID string, text string, stage string, toolCalls []llm.ToolCall, actionDefinitions []toolApprovalActionDefinition) *model.SlackAttachment {
 	toolIDs := make([]string, 0, len(toolCalls))
 	for _, toolCall := range toolCalls {
 		toolIDs = append(toolIDs, toolCall.ID)
@@ -77,9 +88,10 @@ func buildToolApprovalAttachment(pluginID string, text string, stage string, too
 			Integration: &model.PostActionIntegration{
 				URL: fmt.Sprintf(toolApprovalActionURLFormat, pluginID),
 				Context: map[string]any{
-					"stage":    stage,
-					"action":   actionDefinition.action,
-					"tool_ids": append([]string(nil), toolIDs...),
+					"stage":            stage,
+					"action":           actionDefinition.action,
+					"tool_ids":         append([]string(nil), toolIDs...),
+					"original_post_id": originalPostID,
 				},
 			},
 		})

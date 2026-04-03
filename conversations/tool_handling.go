@@ -236,7 +236,11 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 			post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 			post.AddProp(streaming.ToolCallRedactedProp, "true")
 			post.DelProp(streaming.PendingToolResultProp)
-			streaming.ClearApprovalAttachments(post)
+			if approvalPostID := streaming.ClearApprovalAttachments(post); approvalPostID != "" {
+				if err := c.mmClient.DeletePost(approvalPostID); err != nil {
+					c.mmClient.LogError("Failed to delete approval post", "error", err, "post_id", post.Id)
+				}
+			}
 			if updateErr := c.mmClient.UpdatePost(post); updateErr != nil {
 				return fmt.Errorf("failed to update post with tool call results: %w", updateErr)
 			}
@@ -265,9 +269,29 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 			userLocale = "en"
 		}
 		T := plugini18n.LocalizerFunc(c.i18n, userLocale)
-		streaming.ClearApprovalAttachments(post)
-		if attachments := streaming.ToolResultApprovalAttachments(c.pluginID, tools, T); attachments != nil {
-			post.AddProp(model.PostPropsAttachments, attachments)
+		if prevApprovalPostID := streaming.ClearApprovalAttachments(post); prevApprovalPostID != "" {
+			if err := c.mmClient.DeletePost(prevApprovalPostID); err != nil {
+				c.mmClient.LogError("Failed to delete call approval post", "error", err, "post_id", post.Id)
+			}
+		}
+		if attachments := streaming.ToolResultApprovalAttachments(c.pluginID, post.Id, tools, T); attachments != nil {
+			approvalRootID := post.RootId
+			if approvalRootID == "" {
+				approvalRootID = post.Id
+			}
+			approvalPost := &model.Post{
+				UserId:    post.UserId,
+				ChannelId: post.ChannelId,
+				RootId:    approvalRootID,
+			}
+			approvalPost.AddProp(streaming.LLMRequesterUserID, requesterID)
+			approvalPost.AddProp(streaming.AllowToolsInChannelProp, "true")
+			approvalPost.AddProp(model.PostPropsAttachments, attachments)
+			if createErr := c.mmClient.CreatePost(approvalPost); createErr != nil {
+				c.mmClient.LogError("Failed to create result approval post", "error", createErr, "post_id", post.Id)
+			} else {
+				post.AddProp(streaming.ToolApprovalPostIDProp, approvalPost.Id)
+			}
 		}
 		// Persist web search context so HandleToolResult and subsequent messages can find it
 		if params := llmContext.Parameters; len(params) > 0 {
@@ -303,7 +327,11 @@ func (c *Conversations) HandleToolCall(userID string, post *model.Post, channel 
 		return fmt.Errorf("failed to marshal tool call results: %w", err)
 	}
 	post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
-	streaming.ClearApprovalAttachments(post)
+	if approvalPostID := streaming.ClearApprovalAttachments(post); approvalPostID != "" {
+		if err := c.mmClient.DeletePost(approvalPostID); err != nil {
+			c.mmClient.LogError("Failed to delete approval post", "error", err, "post_id", post.Id)
+		}
+	}
 
 	// Persist web search context if it exists (so it's available for subsequent tool calls)
 	if webSearchParams := llmContext.Parameters; len(webSearchParams) > 0 {
@@ -393,7 +421,11 @@ func (c *Conversations) HandleToolResult(userID string, post *model.Post, channe
 		post.AddProp(streaming.ToolCallProp, string(redactedToolsJSON))
 		post.AddProp(streaming.ToolCallRedactedProp, "true")
 		post.DelProp(streaming.PendingToolResultProp)
-		streaming.ClearApprovalAttachments(post)
+		if approvalPostID := streaming.ClearApprovalAttachments(post); approvalPostID != "" {
+			if err := c.mmClient.DeletePost(approvalPostID); err != nil {
+				c.mmClient.LogError("Failed to delete approval post", "error", err, "post_id", post.Id)
+			}
+		}
 		if updateErr := c.mmClient.UpdatePost(post); updateErr != nil {
 			return fmt.Errorf("failed to update post after tool result rejection: %w", updateErr)
 		}
@@ -444,7 +476,11 @@ func (c *Conversations) HandleToolResult(userID string, post *model.Post, channe
 	post.AddProp(streaming.ToolCallProp, string(resolvedToolsJSON))
 	post.DelProp(streaming.ToolCallRedactedProp)
 	post.DelProp(streaming.PendingToolResultProp)
-	streaming.ClearApprovalAttachments(post)
+	if approvalPostID := streaming.ClearApprovalAttachments(post); approvalPostID != "" {
+		if err := c.mmClient.DeletePost(approvalPostID); err != nil {
+			c.mmClient.LogError("Failed to delete approval post", "error", err, "post_id", post.Id)
+		}
+	}
 	// Persist web search context so subsequent messages in the thread preserve citations
 	if params := llmContext.Parameters; len(params) > 0 {
 		if _, hasWebSearch := params[mmtools.WebSearchContextKey]; hasWebSearch {
