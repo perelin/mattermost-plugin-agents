@@ -656,7 +656,7 @@ func TestStreamToPostAppendsPostfixMessage(t *testing.T) {
 			}
 
 			bundle := i18n.Init()
-			service := New(client, bundle)
+			service := NewMMPostStreamService(client, bundle)
 
 			post := &model.Post{
 				Id:        postID,
