@@ -16,10 +16,16 @@ func TestBuildSkippedImagesNote(t *testing.T) {
 	T := i18n.LocalizerFunc(bundle, "en")
 
 	tests := []struct {
-		name     string
-		skipped  []llm.SkippedFile
-		contains []string
+		name            string
+		skipped         []llm.SkippedFile
+		contains        []string
+		wantEmptyResult bool
 	}{
+		{
+			name:            "zero skipped files",
+			skipped:         nil,
+			wantEmptyResult: true,
+		},
 		{
 			name: "single skipped image",
 			skipped: []llm.SkippedFile{
@@ -40,6 +46,10 @@ func TestBuildSkippedImagesNote(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			note := buildSkippedImagesNote(T, tc.skipped)
+			if tc.wantEmptyResult {
+				require.Empty(t, note)
+				return
+			}
 			for _, substr := range tc.contains {
 				require.Contains(t, note, substr)
 			}

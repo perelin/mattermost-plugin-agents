@@ -439,6 +439,9 @@ func isImageMimeType(mimeType string) bool {
 }
 
 func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) string {
+	if len(skipped) == 0 {
+		return ""
+	}
 	limitMB := fmt.Sprintf("%.0f MB", float64(skipped[0].Limit)/(1024*1024))
 	if len(skipped) == 1 {
 		sizeMB := fmt.Sprintf("%.1f MB", float64(skipped[0].Size)/(1024*1024))
