@@ -45,7 +45,8 @@ type TextStreamEvent struct {
 
 // TextStreamResult represents a stream of text events
 type TextStreamResult struct {
-	Stream <-chan TextStreamEvent
+	Stream         <-chan TextStreamEvent
+	PostfixMessage string // static note appended to the bot reply post; set by caller before passing to StreamToPost
 }
 
 func NewStreamFromString(text string) *TextStreamResult {

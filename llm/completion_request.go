@@ -15,6 +15,13 @@ type File struct {
 	Reader   io.Reader
 }
 
+// SkippedFile records an image that was excluded from the LLM request due to size.
+type SkippedFile struct {
+	Name  string
+	Size  int64 // actual file size in bytes
+	Limit int64 // the MaxFileSize limit that was applied
+}
+
 type PostRole int
 
 const (
@@ -27,6 +34,7 @@ type Post struct {
 	Role               PostRole
 	Message            string
 	Files              []File
+	SkippedFiles       []SkippedFile
 	ToolUse            []ToolCall
 	Reasoning          string // Extended thinking/reasoning content from models that support it
 	ReasoningSignature string // Signature for thinking blocks (opaque verification field)

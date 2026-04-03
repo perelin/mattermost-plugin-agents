@@ -34,5 +34,13 @@
   {
     "id": "agents.summarize_transcription",
     "translation": "Claro, resumiré esta transcripción: %s/_redirect/pl/%s\n"
+  },
+  {
+    "id": "agents.skipped_image_single",
+    "translation": "Nota: La imagen \"%s\" (%s) no se envió a la IA — supera el límite de tamaño de %s."
+  },
+  {
+    "id": "agents.skipped_images_multiple",
+    "translation": "Nota: %d imágenes no se enviaron a la IA — superan el límite de tamaño de %s: %s"
   }
 ]
