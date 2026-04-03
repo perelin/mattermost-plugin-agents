@@ -171,6 +171,7 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	}
 
 	posts = append(posts, c.PostToAIPost(bot, post))
+	currentPost := posts[len(posts)-1]
 
 	completionRequest := llm.CompletionRequest{
 		Posts:     posts,
@@ -192,6 +193,11 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	result, err := bot.LLM().ChatCompletion(completionRequest, opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(currentPost.SkippedFiles) > 0 {
+		T := i18n.LocalizerFunc(c.i18n, postingUser.Locale)
+		result.PostfixMessage = buildSkippedImagesNote(T, currentPost.SkippedFiles)
 	}
 
 	// Enrich tool calls with server origin for auto-approval decisions
@@ -455,6 +461,7 @@ func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) s
 
 func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 	var filesForUpstream []llm.File
+	var skippedFiles []llm.SkippedFile
 	message := format.PostBody(post)
 	var extractedFileContents []string
 
@@ -497,6 +504,14 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 		}
 
 		if bot.GetConfig().EnableVision && isImageMimeType(fileInfo.MimeType) {
+			if fileInfo.Size > maxFileSize {
+				skippedFiles = append(skippedFiles, llm.SkippedFile{
+					Name:  fileInfo.Name,
+					Size:  fileInfo.Size,
+					Limit: maxFileSize,
+				})
+				continue
+			}
 			file, err := c.mmClient.GetFile(fileID)
 			if err != nil {
 				c.mmClient.LogError("Error getting file", "error", err)
@@ -558,6 +573,7 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 		Role:               role,
 		Message:            message,
 		Files:              filesForUpstream,
+		SkippedFiles:       skippedFiles,
 		ToolUse:            tools,
 		Reasoning:          reasoning,
 		ReasoningSignature: reasoningSignature,

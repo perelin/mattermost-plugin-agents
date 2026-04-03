@@ -37,6 +37,8 @@ type fakeMMClient struct {
 	kvDeletes    []string
 	posts        map[string]*model.Post
 	channels     map[string]*model.Channel
+	fileInfos    map[string]*model.FileInfo
+	fileContents map[string]io.ReadCloser
 }
 
 func (c *fakeMMClient) GetUser(userID string) (*model.User, error) {
@@ -183,11 +185,21 @@ func (c *fakeMMClient) HasPermissionToChannel(string, string, *model.Permission)
 	return true
 }
 
-func (c *fakeMMClient) GetFileInfo(string) (*model.FileInfo, error) {
+func (c *fakeMMClient) GetFileInfo(fileID string) (*model.FileInfo, error) {
+	if c.fileInfos != nil {
+		if fi, ok := c.fileInfos[fileID]; ok {
+			return fi, nil
+		}
+	}
 	return nil, errors.New("not implemented")
 }
 
-func (c *fakeMMClient) GetFile(string) (io.ReadCloser, error) {
+func (c *fakeMMClient) GetFile(fileID string) (io.ReadCloser, error) {
+	if c.fileContents != nil {
+		if f, ok := c.fileContents[fileID]; ok {
+			return f, nil
+		}
+	}
 	return nil, errors.New("not implemented")
 }
 
