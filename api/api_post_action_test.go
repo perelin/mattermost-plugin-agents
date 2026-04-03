@@ -61,6 +61,10 @@ func (c *approvalTestConversationConfig) MCP() mcp.Config {
 	return mcp.Config{}
 }
 
+type falseLicenseChecker struct{}
+
+func (f *falseLicenseChecker) IsBasicsLicensed() bool { return false }
+
 type approvalToolArgs struct {
 	Value string `json:"value"`
 }
@@ -271,7 +275,7 @@ func setupToolApprovalTestEnvironment(t *testing.T) (*TestEnvironment, *approval
 		e.api.contextBuilder,
 		e.bots,
 		nil,
-		e.api.licenseChecker,
+		enterprise.NewLicenseChecker(e.client),
 		e.api.i18nBundle,
 		nil,
 		&approvalTestConversationConfig{},
@@ -317,7 +321,6 @@ func makeToolApprovalRequest(t *testing.T, userID string, context map[string]any
 
 func parseToolApprovalResponse(t *testing.T, recorder *httptest.ResponseRecorder) model.PostActionIntegrationResponse {
 	t.Helper()
-
 	var resp model.PostActionIntegrationResponse
 	err := json.Unmarshal(recorder.Body.Bytes(), &resp)
 	require.NoError(t, err)
@@ -512,6 +515,49 @@ func TestHandleToolApprovalAction(t *testing.T) {
 			requestUserID:  testUserID,
 			context:        map[string]any{"tool_ids": callToolIDs},
 			post:           newToolApprovalPost(string(callToolCallsJSON)),
+			expectedStatus: http.StatusOK,
+			expectedText:   "This tool approval is no longer available.",
+			assertions: func(t *testing.T, mmClient *approvalFakeMMClient, _ *model.Post, _ *model.Post) {
+				require.Empty(t, mmClient.updatedPosts)
+			},
+		},
+		{
+			name:           "unlicensed returns not available",
+			requestUserID:  testUserID,
+			context:        map[string]any{"stage": "call", "action": "accept_all", "tool_ids": callToolIDs},
+			post:           newToolApprovalPost(string(callToolCallsJSON)),
+			expectedStatus: http.StatusOK,
+			expectedText:   "This tool approval is no longer available.",
+			configureEnvironment: func(e *TestEnvironment, _ *approvalFakeMMClient, _ *model.Post) {
+				e.api.licenseChecker = &falseLicenseChecker{}
+			},
+			assertions: func(t *testing.T, mmClient *approvalFakeMMClient, _ *model.Post, _ *model.Post) {
+				require.Empty(t, mmClient.updatedPosts)
+			},
+		},
+		{
+			name:           "channel tool calling disabled returns not available",
+			requestUserID:  testUserID,
+			context:        map[string]any{"stage": "call", "action": "accept_all", "tool_ids": callToolIDs},
+			post:           newToolApprovalPost(string(callToolCallsJSON)),
+			expectedStatus: http.StatusOK,
+			expectedText:   "This tool approval is no longer available.",
+			configureEnvironment: func(e *TestEnvironment, _ *approvalFakeMMClient, _ *model.Post) {
+				e.config.enableChannelMentionToolCalling = false
+			},
+			assertions: func(t *testing.T, mmClient *approvalFakeMMClient, _ *model.Post, _ *model.Post) {
+				require.Empty(t, mmClient.updatedPosts)
+			},
+		},
+		{
+			name:          "missing AllowToolsInChannelProp returns not available",
+			requestUserID: testUserID,
+			context:       map[string]any{"stage": "call", "action": "accept_all", "tool_ids": callToolIDs},
+			post: func() *model.Post {
+				p := newToolApprovalPost(string(callToolCallsJSON))
+				delete(p.Props, streaming.AllowToolsInChannelProp)
+				return p
+			}(),
 			expectedStatus: http.StatusOK,
 			expectedText:   "This tool approval is no longer available.",
 			assertions: func(t *testing.T, mmClient *approvalFakeMMClient, _ *model.Post, _ *model.Post) {
