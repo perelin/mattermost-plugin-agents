@@ -450,6 +450,11 @@ func (p *MMPostStreamService) StreamToPost(ctx context.Context, stream *llm.Text
 					p.sendPostStreamingUpdateEventWithBroadcast(post, post.Message, broadcast)
 				}
 
+				if stream.PostfixMessage != "" {
+					post.Message += "\n\n---\n" + stream.PostfixMessage
+					p.sendPostStreamingUpdateEventWithBroadcast(post, post.Message, broadcast)
+				}
+
 				// Inline citations have already been cleaned in EventTypeAnnotations handler
 				// (if there were any citations, they were cleaned before annotations were sent)
 

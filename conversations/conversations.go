@@ -171,6 +171,7 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	}
 
 	posts = append(posts, c.PostToAIPost(bot, post))
+	currentPost := posts[len(posts)-1]
 
 	completionRequest := llm.CompletionRequest{
 		Posts:     posts,
@@ -192,6 +193,11 @@ func (c *Conversations) ProcessUserRequestWithContext(bot *bots.Bot, postingUser
 	result, err := bot.LLM().ChatCompletion(completionRequest, opts...)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(currentPost.SkippedFiles) > 0 {
+		T := i18n.LocalizerFunc(c.i18n, postingUser.Locale)
+		result.PostfixMessage = buildSkippedImagesNote(T, currentPost.SkippedFiles)
 	}
 
 	// Enrich tool calls with server origin for auto-approval decisions
@@ -432,8 +438,33 @@ func isImageMimeType(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
 }
 
+func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) string {
+	if len(skipped) == 0 {
+		return ""
+	}
+	limitMB := fmt.Sprintf("%.0f MB", float64(skipped[0].Limit)/(1024*1024))
+	if len(skipped) == 1 {
+		sizeMB := fmt.Sprintf("%.1f MB", float64(skipped[0].Size)/(1024*1024))
+		return T(
+			"agents.skipped_image_single",
+			"Note: The image \"%s\" (%s) was not sent to the AI — it exceeds the %s size limit.",
+			skipped[0].Name, sizeMB, limitMB,
+		)
+	}
+	names := make([]string, len(skipped))
+	for i, f := range skipped {
+		names[i] = fmt.Sprintf("%s (%.1f MB)", f.Name, float64(f.Size)/(1024*1024))
+	}
+	return T(
+		"agents.skipped_images_multiple",
+		"Note: %d images were not sent to the AI — they exceed the %s size limit: %s",
+		len(skipped), limitMB, strings.Join(names, ", "),
+	)
+}
+
 func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 	var filesForUpstream []llm.File
+	var skippedFiles []llm.SkippedFile
 	message := format.PostBody(post)
 	var extractedFileContents []string
 
@@ -476,6 +507,14 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 		}
 
 		if bot.GetConfig().EnableVision && isImageMimeType(fileInfo.MimeType) {
+			if fileInfo.Size > maxFileSize {
+				skippedFiles = append(skippedFiles, llm.SkippedFile{
+					Name:  fileInfo.Name,
+					Size:  fileInfo.Size,
+					Limit: maxFileSize,
+				})
+				continue
+			}
 			file, err := c.mmClient.GetFile(fileID)
 			if err != nil {
 				c.mmClient.LogError("Error getting file", "error", err)
@@ -537,6 +576,7 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 		Role:               role,
 		Message:            message,
 		Files:              filesForUpstream,
+		SkippedFiles:       skippedFiles,
 		ToolUse:            tools,
 		Reasoning:          reasoning,
 		ReasoningSignature: reasoningSignature,
