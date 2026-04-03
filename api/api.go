@@ -16,7 +16,6 @@ import (
 	"github.com/mattermost/mattermost-plugin-ai/bots"
 	"github.com/mattermost/mattermost-plugin-ai/conversations"
 	"github.com/mattermost/mattermost-plugin-ai/embeddings"
-	"github.com/mattermost/mattermost-plugin-ai/enterprise"
 	"github.com/mattermost/mattermost-plugin-ai/i18n"
 	"github.com/mattermost/mattermost-plugin-ai/indexer"
 	"github.com/mattermost/mattermost-plugin-ai/llm"
@@ -47,6 +46,11 @@ type Config interface {
 	EnableChannelMentionToolCalling() bool
 }
 
+// LicenseChecker defines the interface for checking license features.
+type LicenseChecker interface {
+	IsBasicsLicensed() bool
+}
+
 type MCPClientManager interface {
 	GetOAuthManager() *mcp.OAuthManager
 	GetToolsCache() *mcp.ToolsCache
@@ -74,7 +78,7 @@ type API struct {
 	config                Config
 	mmClient              mmapi.Client
 	dbClient              *mmapi.DBClient
-	licenseChecker        *enterprise.LicenseChecker
+	licenseChecker        LicenseChecker
 	streamingService      streaming.Service
 	i18nBundle            *i18n.Bundle
 	mcpClientManager      MCPClientManager
@@ -98,7 +102,7 @@ func New(
 	prompts *llm.Prompts,
 	mmClient mmapi.Client,
 	dbClient *mmapi.DBClient,
-	licenseChecker *enterprise.LicenseChecker,
+	licenseChecker LicenseChecker,
 	streamingService streaming.Service,
 	i18nBundle *i18n.Bundle,
 	mcpClientManager MCPClientManager,
