@@ -505,7 +505,8 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 
 	streaming.ClearApprovalAttachments(post)
 	if err := a.pluginAPI.Post.UpdatePost(post); err != nil {
-		respond(err.Error())
+		a.pluginAPI.Log.Error("Failed to update post after clearing approval attachments", "error", err)
+		respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		return
 	}
 
@@ -536,6 +537,7 @@ func (a *API) handleToolApprovalAction(c *gin.Context) {
 		case "only the original requester can approve/reject tool calls", "only the original requester can approve/reject tool results":
 			respond(T("agents.tool_approval.not_authorized", "Only the person who triggered this can approve."))
 		default:
+			a.pluginAPI.Log.Error("Unexpected tool approval action error", "error", actionErr)
 			respond(T("agents.tool_approval.not_available", "This tool approval is no longer available."))
 		}
 		return
