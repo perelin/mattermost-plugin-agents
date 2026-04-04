@@ -37,10 +37,10 @@
   },
   {
     "id": "agents.skipped_image_single",
-    "translation": "Nota: La imagen \"%s\" (%s) no se envió a la IA — supera el límite de tamaño de %s."
+    "translation": "Nota: La imagen \"%s\" (%s sin codificar, %s codificada) no se envió a la IA — supera el límite de tamaño de %s."
   },
   {
     "id": "agents.skipped_images_multiple",
-    "translation": "Nota: %d imágenes no se enviaron a la IA — superan el límite de tamaño de %s: %s"
+    "translation": "Nota: %d imágenes no se enviaron a la IA — superan el límite de tamaño de %s (codificadas): %s"
   }
 ]

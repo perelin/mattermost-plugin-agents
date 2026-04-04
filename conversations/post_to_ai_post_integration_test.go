@@ -69,6 +69,13 @@ func TestPostToAIPostSkipsOversizedImage(t *testing.T) {
 			wantSkipped:  1,
 		},
 		{
+			name:         "image under raw limit but over base64 limit is skipped",
+			fileSize:     4 * 1024 * 1024,
+			enableVision: true,
+			wantFiles:    0,
+			wantSkipped:  1,
+		},
+		{
 			name:         "oversized image with vision disabled is not skipped or sent",
 			fileSize:     8 * 1024 * 1024,
 			enableVision: false,
@@ -175,5 +182,5 @@ func TestProcessUserRequestWithContextSetsPostfixMessageForSkippedImages(t *test
 
 	result, err := c.ProcessUserRequestWithContext(bot, postingUser, channel, post, context, false)
 	require.NoError(t, err)
-	require.Equal(t, "Note: The image \"photo.jpg\" (8.0 MB) was not sent to the AI — it exceeds the 5 MB size limit.", result.PostfixMessage)
+	require.Equal(t, "Note: The image \"photo.jpg\" (8.0 MB raw, 10.7 MB encoded) was not sent to the AI — it exceeds the 5 MB size limit.", result.PostfixMessage)
 }

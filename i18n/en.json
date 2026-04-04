@@ -81,10 +81,10 @@
   },
   {
     "id": "agents.skipped_image_single",
-    "translation": "Note: The image \"%s\" (%s) was not sent to the AI — it exceeds the %s size limit."
+    "translation": "Note: The image \"%s\" (%s raw, %s encoded) was not sent to the AI — it exceeds the %s size limit."
   },
   {
     "id": "agents.skipped_images_multiple",
-    "translation": "Note: %d images were not sent to the AI — they exceed the %s size limit: %s"
+    "translation": "Note: %d images were not sent to the AI — they exceed the %s size limit (encoded): %s"
   }
 ]

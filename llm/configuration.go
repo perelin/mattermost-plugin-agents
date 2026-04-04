@@ -69,7 +69,10 @@ type BotConfig struct {
 	UserAccessLevel    UserAccessLevel    `json:"userAccessLevel"`
 	UserIDs            []string           `json:"userIDs"`
 	TeamIDs            []string           `json:"teamIDs"`
-	MaxFileSize        int64              `json:"maxFileSize"`
+	// MaxFileSize is the maximum allowed base64-encoded size for images sent to the LLM.
+	// Because images are base64-encoded before transmission (~33% size increase), a 5 MB limit
+	// will reject raw files larger than ~3.75 MB.
+	MaxFileSize int64 `json:"maxFileSize"`
 
 	// EnabledNativeTools contains the list of enabled native tools for this bot
 	// For OpenAI: ["web_search", "file_search", "code_interpreter"] (only works when UseResponsesAPI is true)

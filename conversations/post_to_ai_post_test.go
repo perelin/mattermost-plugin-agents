@@ -31,7 +31,7 @@ func TestBuildSkippedImagesNote(t *testing.T) {
 			skipped: []llm.SkippedFile{
 				{Name: "photo.jpg", Size: 8 * 1024 * 1024, Limit: 5 * 1024 * 1024},
 			},
-			contains: []string{"photo.jpg", "8.0 MB", "5 MB"},
+			contains: []string{"photo.jpg", "8.0 MB raw", "10.7 MB encoded", "5 MB"},
 		},
 		{
 			name: "multiple skipped images",
@@ -39,7 +39,7 @@ func TestBuildSkippedImagesNote(t *testing.T) {
 				{Name: "a.jpg", Size: 6 * 1024 * 1024, Limit: 5 * 1024 * 1024},
 				{Name: "b.png", Size: 9 * 1024 * 1024, Limit: 5 * 1024 * 1024},
 			},
-			contains: []string{"2", "a.jpg", "b.png", "5 MB"},
+			contains: []string{"2", "a.jpg", "b.png", "5 MB", "8.0 MB", "12.0 MB"},
 		},
 	}
 

@@ -438,6 +438,13 @@ func isImageMimeType(mimeType string) bool {
 	return strings.HasPrefix(mimeType, "image/")
 }
 
+// base64EncodedSize returns the size of the base64-encoded representation of
+// rawBytes bytes. Base64 encodes 3 bytes into 4 characters, so the output
+// length is ceil(rawBytes * 4 / 3).
+func base64EncodedSize(rawBytes int64) int64 {
+	return (rawBytes*4 + 2) / 3
+}
+
 func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) string {
 	if len(skipped) == 0 {
 		return ""
@@ -445,19 +452,21 @@ func buildSkippedImagesNote(T i18n.TranslationFunc, skipped []llm.SkippedFile) s
 	limitMB := fmt.Sprintf("%.0f MB", float64(skipped[0].Limit)/(1024*1024))
 	if len(skipped) == 1 {
 		sizeMB := fmt.Sprintf("%.1f MB", float64(skipped[0].Size)/(1024*1024))
+		encodedMB := fmt.Sprintf("%.1f MB", float64(base64EncodedSize(skipped[0].Size))/(1024*1024))
 		return T(
 			"agents.skipped_image_single",
-			"Note: The image \"%s\" (%s) was not sent to the AI — it exceeds the %s size limit.",
-			skipped[0].Name, sizeMB, limitMB,
+			"Note: The image \"%s\" (%s raw, %s encoded) was not sent to the AI — it exceeds the %s size limit.",
+			skipped[0].Name, sizeMB, encodedMB, limitMB,
 		)
 	}
 	names := make([]string, len(skipped))
 	for i, f := range skipped {
-		names[i] = fmt.Sprintf("%s (%.1f MB)", f.Name, float64(f.Size)/(1024*1024))
+		encodedMB := fmt.Sprintf("%.1f MB", float64(base64EncodedSize(f.Size))/(1024*1024))
+		names[i] = fmt.Sprintf("%s (%.1f MB raw, %s)", f.Name, float64(f.Size)/(1024*1024), encodedMB)
 	}
 	return T(
 		"agents.skipped_images_multiple",
-		"Note: %d images were not sent to the AI — they exceed the %s size limit: %s",
+		"Note: %d images were not sent to the AI — they exceed the %s size limit (encoded): %s",
 		len(skipped), limitMB, strings.Join(names, ", "),
 	)
 }
@@ -507,7 +516,7 @@ func (c *Conversations) PostToAIPost(bot *bots.Bot, post *model.Post) llm.Post {
 		}
 
 		if bot.GetConfig().EnableVision && isImageMimeType(fileInfo.MimeType) {
-			if fileInfo.Size > maxFileSize {
+			if base64EncodedSize(fileInfo.Size) > maxFileSize {
 				skippedFiles = append(skippedFiles, llm.SkippedFile{
 					Name:  fileInfo.Name,
 					Size:  fileInfo.Size,
