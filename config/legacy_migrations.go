@@ -207,6 +207,50 @@ func RunAllLegacyMigrations(cfg Config, loadLegacyConfig func() (LegacyServiceCo
 		cfg = newCfg
 	}
 
+	newCfg, didChange, err = MigrateToolPolicyAutoRun(cfg)
+	if err != nil {
+		return cfg, false, fmt.Errorf("failed to migrate tool policy auto_run: %w", err)
+	}
+	if didChange {
+		changed = true
+		cfg = newCfg
+	}
+
+	return cfg, changed, nil
+}
+
+// legacyToolPolicyAutoRun is the two-value policy string used by the P2Lab fork
+// before upstream introduced the three-value ask / auto_run_in_dm /
+// auto_run_everywhere model. It mapped to "auto-run in DMs and channels".
+const legacyToolPolicyAutoRun = "auto_run"
+
+// MigrateToolPolicyAutoRun rewrites the P2Lab fork's legacy "auto_run" tool
+// policy to upstream's "auto_run_everywhere", which carries the same
+// "auto-execute in both DMs and channels" semantics. Without this, the
+// upstream GetToolPolicy coerces the now-unknown "auto_run" value back to
+// "ask", silently re-enabling approval prompts for tools that admins had
+// configured to run automatically. It is idempotent: once no "auto_run"
+// values remain, subsequent runs report no change.
+func MigrateToolPolicyAutoRun(cfg Config) (Config, bool, error) {
+	changed := false
+
+	migrate := func(toolConfigs []MCPToolConfig) {
+		for i := range toolConfigs {
+			if toolConfigs[i].Policy == legacyToolPolicyAutoRun {
+				toolConfigs[i].Policy = MCPToolPolicyAutoRunEverywhere
+				changed = true
+			}
+		}
+	}
+
+	for i := range cfg.MCP.Servers {
+		migrate(cfg.MCP.Servers[i].ToolConfigs)
+	}
+	for i := range cfg.MCP.PluginServers {
+		migrate(cfg.MCP.PluginServers[i].ToolConfigs)
+	}
+	migrate(cfg.MCP.EmbeddedServer.ToolConfigs)
+
 	return cfg, changed, nil
 }
 

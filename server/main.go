@@ -195,6 +195,20 @@ func (p *Plugin) OnActivate() error {
 		return fmt.Errorf("failed to load config from database: %w", err)
 	}
 	if dbConfig != nil {
+		// Servers whose config was already migrated to the DB before the
+		// upstream sync still carry the P2Lab fork's legacy "auto_run" tool
+		// policy. Upstream now coerces that unknown value back to "ask", so
+		// rewrite it to "auto_run_everywhere" and persist. Idempotent.
+		if migratedCfg, didChange, migErr := config.MigrateToolPolicyAutoRun(*dbConfig); migErr != nil {
+			pluginAPI.Log.Error("failed to migrate legacy tool policy auto_run", "error", migErr)
+		} else if didChange {
+			if saveErr := p.store.SaveConfig(migratedCfg); saveErr != nil {
+				pluginAPI.Log.Error("failed to persist migrated tool policy config", "error", saveErr)
+			} else {
+				pluginAPI.Log.Info("Migrated legacy auto_run tool policy to auto_run_everywhere")
+			}
+			dbConfig = &migratedCfg
+		}
 		p.configuration.Update(dbConfig)
 	}
 	p.configMigrated = true

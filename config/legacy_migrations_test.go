@@ -1119,3 +1119,56 @@ func TestRunAllLegacyMigrations(t *testing.T) {
 		})
 	}
 }
+
+func TestMigrateToolPolicyAutoRun(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantPolicy  string
+		wantChanged bool
+	}{
+		{name: "legacy auto_run becomes auto_run_everywhere", input: "auto_run", wantPolicy: MCPToolPolicyAutoRunEverywhere, wantChanged: true},
+		{name: "ask is left untouched", input: MCPToolPolicyAsk, wantPolicy: MCPToolPolicyAsk, wantChanged: false},
+		{name: "auto_run_in_dm is left untouched", input: MCPToolPolicyAutoRunInDM, wantPolicy: MCPToolPolicyAutoRunInDM, wantChanged: false},
+		{name: "auto_run_everywhere is left untouched", input: MCPToolPolicyAutoRunEverywhere, wantPolicy: MCPToolPolicyAutoRunEverywhere, wantChanged: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{MCP: MCPConfig{
+				Servers: []MCPServerConfig{{
+					Name:        "remote",
+					ToolConfigs: []MCPToolConfig{{Name: "remote_tool", Policy: tt.input}},
+				}},
+				PluginServers: []PluginServerConfig{{
+					PluginID:    "other-plugin",
+					ToolConfigs: []MCPToolConfig{{Name: "plugin_tool", Policy: tt.input}},
+				}},
+				EmbeddedServer: MCPEmbeddedServerConfig{
+					ToolConfigs: []MCPToolConfig{{Name: "embedded_tool", Policy: tt.input}},
+				},
+			}}
+
+			got, changed, err := MigrateToolPolicyAutoRun(cfg)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantChanged, changed)
+			assert.Equal(t, tt.wantPolicy, got.MCP.Servers[0].ToolConfigs[0].Policy)
+			assert.Equal(t, tt.wantPolicy, got.MCP.PluginServers[0].ToolConfigs[0].Policy)
+			assert.Equal(t, tt.wantPolicy, got.MCP.EmbeddedServer.ToolConfigs[0].Policy)
+		})
+	}
+}
+
+func TestMigrateToolPolicyAutoRunIsIdempotent(t *testing.T) {
+	cfg := Config{MCP: MCPConfig{Servers: []MCPServerConfig{{
+		ToolConfigs: []MCPToolConfig{{Name: "t", Policy: "auto_run"}},
+	}}}}
+
+	migrated, changed, err := MigrateToolPolicyAutoRun(cfg)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	_, changedAgain, err := MigrateToolPolicyAutoRun(migrated)
+	require.NoError(t, err)
+	assert.False(t, changedAgain, "second run must report no change")
+}
