@@ -39,11 +39,11 @@ func TestNotificationWillBePushed(t *testing.T) {
 			wantBlocked: true,
 		},
 		{
-			name: "blocks AI agent custom_llmbot root post in a regular channel",
+			name: "blocks AI agent custom_p2lab_agents_bot root post in a regular channel",
 			notification: &model.PushNotification{
 				PostId:      "post-2",
 				SenderId:    botUserID,
-				PostType:    "custom_llmbot",
+				PostType:    "custom_p2lab_agents_bot",
 				ChannelType: model.ChannelTypeOpen,
 			},
 			wantBlocked: true,
@@ -62,7 +62,7 @@ func TestNotificationWillBePushed(t *testing.T) {
 			notification: &model.PushNotification{
 				PostId:      "post-4",
 				SenderId:    botUserID,
-				PostType:    "custom_llm_postback",
+				PostType:    "custom_p2lab_agents_postback",
 				ChannelType: model.ChannelTypeOpen,
 			},
 			wantBlocked: false,
@@ -77,11 +77,11 @@ func TestNotificationWillBePushed(t *testing.T) {
 			wantBlocked: false,
 		},
 		{
-			name: "does NOT block a custom_llmbot post from an unknown sender",
+			name: "does NOT block a custom_p2lab_agents_bot post from an unknown sender",
 			notification: &model.PushNotification{
 				PostId:      "post-6",
 				SenderId:    "regular-user",
-				PostType:    "custom_llmbot",
+				PostType:    "custom_p2lab_agents_bot",
 				ChannelType: model.ChannelTypeOpen,
 			},
 			wantBlocked: false,
@@ -174,7 +174,7 @@ func TestNotificationWillBePushed_BotsCacheUninitialized(t *testing.T) {
 		PostId:   "post-1",
 		SenderId: botUserID,
 		RootId:   "parent-post-1",
-		PostType: "custom_llmbot",
+		PostType: "custom_p2lab_agents_bot",
 	}
 
 	got, reason := p.NotificationWillBePushed(notification, "recipient-user")

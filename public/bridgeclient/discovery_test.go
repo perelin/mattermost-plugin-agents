@@ -23,7 +23,7 @@ func TestDiscoveryEndpointsSuccess(t *testing.T) {
 	}{
 		{
 			name:          "GetAgents sends expected request and maps response",
-			expectedPath:  "/mattermost-ai/bridge/v1/agents",
+			expectedPath:  "/p2lab-agents/bridge/v1/agents",
 			expectedQuery: "user_id=abcdefghijklmnopqrstuvwxyz",
 			responseBody: `{
 				"agents": [
@@ -54,7 +54,7 @@ func TestDiscoveryEndpointsSuccess(t *testing.T) {
 		},
 		{
 			name:          "GetServices omits query for empty user ID and maps response",
-			expectedPath:  "/mattermost-ai/bridge/v1/services",
+			expectedPath:  "/p2lab-agents/bridge/v1/services",
 			expectedQuery: "",
 			responseBody: `{
 				"services": [
@@ -75,7 +75,7 @@ func TestDiscoveryEndpointsSuccess(t *testing.T) {
 		},
 		{
 			name:          "GetAgentTools sends expected request and maps response",
-			expectedPath:  "/mattermost-ai/bridge/v1/agents/zyxwvutsrqponmlkjihgfedcba/tools",
+			expectedPath:  "/p2lab-agents/bridge/v1/agents/zyxwvutsrqponmlkjihgfedcba/tools",
 			expectedQuery: "user_id=abcdefghijklmnopqrstuvwxyz",
 			responseBody: `{
 				"tools": [

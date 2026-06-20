@@ -412,44 +412,12 @@ func TestCreateAgentFreeTierAllowsFirstAgent(t *testing.T) {
 	require.Equal(t, http.StatusCreated, recorder.Result().StatusCode)
 }
 
-func TestCreateAgentFreeTierBlocksWhenQuotaReached(t *testing.T) {
-	e := setupAgentTestEnvironment(t)
-	defer e.Cleanup(t)
-
-	mockUnlicensed(e.mockAPI)
-	e.mockAPI.On("HasPermissionTo", testUserID, model.PermissionManageOwnAgent).Return(true)
-	e.mockAPI.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-
-	// One existing agent is already at the free-tier quota.
-	e.agentStore.agents["existing"] = &llm.BotConfig{
-		ID: "existing", CreatorID: "someone-else", Name: "existing", DisplayName: "Existing",
-	}
-
-	recorder := doRequest(e.api, http.MethodPost, "/agents", createAgentBody(nil), testUserID)
-	require.Equal(t, http.StatusForbidden, recorder.Result().StatusCode)
-}
-
-func TestListAgentsIncludesActiveCountHeaderWhenUnlicensed(t *testing.T) {
-	e := setupAgentTestEnvironment(t)
-	defer e.Cleanup(t)
-
-	mockUnlicensed(e.mockAPI)
-	e.mockAPI.On("LogError", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-
-	e.agentStore.agents["agent-1"] = &llm.BotConfig{
-		ID: "agent-1", CreatorID: "other-user", DisplayName: "Private Agent",
-		UserAccessLevel: llm.UserAccessLevelNone,
-	}
-
-	recorder := doRequest(e.api, http.MethodGet, "/agents", nil, testUserID)
-	resp := recorder.Result()
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "1", resp.Header.Get(AgentActiveCountHeader))
-
-	var agents []*llm.BotConfig
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&agents))
-	assert.Empty(t, agents)
-}
+// NOTE: upstream's free-tier agent quota tests
+// (TestCreateAgentFreeTierBlocksWhenQuotaReached and
+// TestListAgentsIncludesActiveCountHeaderWhenUnlicensed) were removed. The
+// P2Lab fork strips enterprise license gating, so IsMultiLLMLicensed() is
+// always true; the quota check and the X-Agent-Active-Count header are never
+// exercised and agent creation is unlimited.
 
 func TestListAgentsOmitsActiveCountHeaderWhenCountFails(t *testing.T) {
 	e := setupAgentTestEnvironment(t)

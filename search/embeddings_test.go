@@ -71,16 +71,10 @@ func TestInitEmbeddingsSearch(t *testing.T) {
 				require.Nil(t, search)
 			},
 		},
-		{
-			name: "missing license returns license error",
-			cfg: embeddings.EmbeddingSearchConfig{
-				Type:       embeddings.SearchTypeComposite,
-				Dimensions: 1536,
-			},
-			licensed:      false,
-			expectError:   true,
-			errorContains: "without a valid license",
-		},
+		// NOTE: upstream's "missing license returns license error" case was
+		// removed — the P2Lab fork strips enterprise license gating (see the
+		// remove-enterprise-license-checks patch), so embedding search is no
+		// longer license-gated.
 		{
 			name: "zero dimensions returns dimension error",
 			cfg: embeddings.EmbeddingSearchConfig{

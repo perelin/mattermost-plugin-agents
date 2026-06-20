@@ -18,7 +18,7 @@ func TestAgentCompletionSendsExpectedPayload(t *testing.T) {
 	client := &Client{}
 	client.httpClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		require.Equal(t, http.MethodPost, req.Method)
-		require.Equal(t, "/mattermost-ai/bridge/v1/completion/agent/abcdefghijklmnopqrstuvwxyz/nostream", req.URL.Path)
+		require.Equal(t, "/p2lab-agents/bridge/v1/completion/agent/abcdefghijklmnopqrstuvwxyz/nostream", req.URL.Path)
 		require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
 		bodyBytes, err := io.ReadAll(req.Body)
