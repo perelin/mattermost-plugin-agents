@@ -143,7 +143,6 @@ export const LLMBotPost = (props: LLMBotPostProps) => {
         }
     }, [precontent, props.post.message, persistedRounds]);
 
-
     useEffect(() => {
         if (conversation) {
             lastPersistedRef.current = persistedRounds;
