@@ -50,25 +50,45 @@ func (p *OAuthAuthenticationProvider) GetAuthenticatedMattermostClient(ctx conte
 		return nil, fmt.Errorf("OAuth provider requires validated token in context")
 	}
 
-	// TODO: This is where we will call the token introspection endpoint or get user from in-memory cache
-	// For now, we're skipping validation and creating the client with the token
-
 	// Create client and set OAuth token
 	client := model.NewAPIv4Client(p.mmServerURL)
 	client.SetOAuthToken(token)
+
+	// Validate the token by fetching the current user. As a resource server we
+	// rely on Mattermost to introspect the token; a successful GetMe confirms the
+	// token is valid and not expired.
+	if _, err := p.fetchAuthenticatedUser(ctx, client); err != nil {
+		return nil, err
+	}
 
 	return client, nil
 }
 
 // GetAuthenticatedUser returns the Mattermost user for the OAuth token in context.
 func (p *OAuthAuthenticationProvider) GetAuthenticatedUser(ctx context.Context) (*model.User, error) {
-	client, err := p.GetAuthenticatedMattermostClient(ctx)
-	if err != nil {
-		return nil, err
+	token, ok := ctx.Value(AuthTokenContextKey).(string)
+	if !ok || token == "" {
+		return nil, fmt.Errorf("OAuth provider requires validated token in context")
 	}
+
+	client := model.NewAPIv4Client(p.mmServerURL)
+	client.SetOAuthToken(token)
+
+	return p.fetchAuthenticatedUser(ctx, client)
+}
+
+func (p *OAuthAuthenticationProvider) fetchAuthenticatedUser(ctx context.Context, client *model.Client4) (*model.User, error) {
 	user, _, err := client.GetMe(ctx, "")
 	if err != nil {
-		return nil, err
+		p.logger.Error("failed to validate OAuth token",
+			"error", err,
+			"server_url", p.mmServerURL)
+		return nil, fmt.Errorf("invalid OAuth token: %w", err)
 	}
+
+	p.logger.Debug("Validated OAuth token for MCP server",
+		"user_id", user.Id,
+		"username", user.Username)
+
 	return user, nil
 }
